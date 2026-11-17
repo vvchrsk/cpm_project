@@ -4,12 +4,24 @@ format: html
 editor: visual
 ---
 
+```{r}
+library(tidyverse)
+library(DESeq2)
+library(fgsea)
+library(msigdbr)
+library(dplyr)
+library(tidyr)
+```
+
 ## Q1
 
 • Prepare and explore the gene-expression data, including appropriate filtering and normalization.
 
 ```{r}
-readRDS("/home/projects/22123/IMvigor210_plain.rds")
+data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
+counts <- data[["counts"]]
+tpm <- data[["tpm"]]
+clinical <- data[["clinical"]]
 ```
 
 • Perform differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes
@@ -35,3 +47,33 @@ readRDS("/home/projects/22123/IMvigor210_plain.rds")
 ```{r}
 
 ```
+
+## RQ3 — Biomarker comparison (Giosuè)
+
+How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
+
+• Visualize the distribution of each biomarker in responders and non-responders using boxplots.
+
+```{r}
+
+```
+
+• Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
+
+```{r}
+
+```
+
+• Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
+
+```{r}
+
+```
+
+• Explain the biological information captured by each biomarker and discuss their relative strengths and limitations
+
+```{r}
+
+```
+
+## RQ4 — (Dhruva)
