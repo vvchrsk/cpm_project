@@ -1,0 +1,37 @@
+---
+title: "01_data_loading"
+format: html
+editor: visual
+---
+
+## Q1
+
+• Prepare and explore the gene-expression data, including appropriate filtering and normalization.
+
+```{r}
+readRDS("/home/projects/22123/IMvigor210_plain.rds")
+```
+
+• Perform differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes
+
+```{r}
+
+```
+
+• Visualize the results using e.g. volcano plots and heatmaps of selected genes.
+
+```{r}
+
+```
+
+• Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
+
+```{r}
+
+```
+
+• Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
+
+```{r}
+
+```
