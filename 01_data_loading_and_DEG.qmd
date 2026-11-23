@@ -334,16 +334,119 @@ dev.off()
 
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
-• Visualize the distribution of each biomarker in responders and non-responders using boxplots.
+```{r}
+data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
+counts <- data[["counts"]]
+tpm <- data[["tpm"]]
+clinical <- data[["clinical"]]
+```
 
 ```{r}
+library(immunedeconv)
+library(ggplot2)
+library(limma)
+library(gridExtra)
 
+all(clinical$pat_id %in% colnames(counts))
+
+# Reorder expression columns to match the phenotype table.
+counts <- counts[, match(clinical$pat_id, colnames(counts)), drop = FALSE]
+
+# Explicitly verify the resulting sample order.
+stopifnot(identical(clinical$pat_id, colnames(counts)))
+
+print(table(clinical$BOR, useNA = "ifany"))
+
+# Tumor mutational burden
+TMB <- clinical$TMB
+
+# Extract PDCD1 expression.
+"PDCD1" %in% rownames(counts)
+PD1 <- as.numeric(counts["PDCD1", ])
+
+GEP_genes <- c(
+  "CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
+  "CXCL9", "CXCR6", "HLA-DQA1", "HLA-DRB1", "HLA-E",
+  "IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1", "TIGIT"
+)
+
+GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(counts)]
+GEP_genes_missing <- setdiff(GEP_genes, rownames(counts))
+
+cat("GEP genes present:", length(GEP_genes_present), "of", length(GEP_genes), "\n")
+# All 18 present
+
+# Extract GEP genes.
+GEP_counts <- counts[GEP_genes_present, , drop = FALSE]
+
+# Standardize each gene across samples.
+# scale() operates on columns, so transpose before and after scaling.
+GEP_counts_scaled <- t(scale(t(GEP_counts)))
+
+# Average standardized expression across GEP genes for each sample.
+GEP_scores <- colMeans(GEP_counts_scaled, na.rm = TRUE)
 ```
+
+• Visualize the distribution of each biomarker in responders and non-responders using boxplots.
 
 • Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
 
 ```{r}
+plot_Response_boxplot <- function(data, variable, y_label, test_result) {
+  ggplot(data, aes(x = Response, y = .data[[variable]])) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.12, alpha = 0.5) +
+    annotate(
+      "text",
+      x = Inf, y = Inf,
+      label = paste0("p = ", signif(test_result$p.value, 3)),
+      hjust = 1.1, vjust = 1.5
+    ) +
+    labs(
+      x = "Response class",
+      y = y_label
+    ) +
+    theme_minimal()
+}
+```
 
+```{r}
+df <- data.frame(
+  sample = clinical$pat_id,
+  TMB = TMB,
+  PD1 = PD1,
+  GEP_scores = GEP_scores,
+  Response = factor(clinical$BOR))
+
+stopifnot(identical(df$sample, colnames(counts)))
+
+TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
+PD1_Response_test <- wilcox.test(PD1 ~ Response, data = df)
+GEP_Response_test <- wilcox.test(GEP_scores ~ Response, data = df)
+
+TMB_Response_test
+PD1_Response_test
+GEP_Response_test
+# All 3 significant p-values
+```
+
+```{r}
+TMB_plot <- plot_Response_boxplot(df, 
+                                  "TMB", 
+                                  "Tumor mutational burden", 
+                                  TMB_Response_test)
+
+PD1_plot <- plot_Response_boxplot(df, 
+                                  "PD1", 
+                                  "PDCD1 expression", 
+                                  PD1_Response_test)
+
+GEP_plot <- plot_Response_boxplot(df, 
+                                  "GEP_scores", 
+                                  "T cell–inflamed GEP score", 
+                                  GEP_Response_test)
+
+grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 ```
 
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
