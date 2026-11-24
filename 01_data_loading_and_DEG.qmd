@@ -174,6 +174,8 @@ pc_df |> group_by(PC) |>
   mutate(padj = p.adjust(p, method = "BH"))
 ```
 
+• Perform differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes. Visualize the results using e.g. volcano plots and heatmaps of selected genes.
+
 ```{r}
 dds <- DESeq(dds)
 resultsNames(dds) 
@@ -196,48 +198,145 @@ res_df |> filter(direction != "Not significant") |> arrange(padj) |>
   write_csv("RQ1_DE_genes_significant.csv")
 ```
 
-```{r}
-
-
-```
-
-• Perform differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes. Visualize the results using e.g. volcano plots and heatmaps of selected genes.
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-
-```
-
-```{r}
-
-```
-
 • Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
 
 ```{r}
+top_label <- res_df |> filter(direction != "Not significant") |>
+  arrange(padj) |> head(15)
 
+p_volcano <- ggplot(res_df |> filter(!is.na(padj)),
+                    aes(log2FoldChange, -log10(padj), color = direction)) +
+  geom_point(alpha = 0.6, size = 1.3) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "grey50") +
+  geom_text_repel(data = top_label, aes(label = gene), size = 3, max.overlaps = 20) +
+  scale_color_manual(values = c("Up in R" = col_BOR[["R"]], "Up in NR" = col_BOR[["NR"]],
+                                "Not significant" = "grey75")) +
+  labs(title = "Volcano plot: R vs NR",
+       x = "Shrunken log2 fold change (R vs NR)",
+       y = "-log10 adjusted p-value", color = NULL) +
+  theme_minimal(base_size = 13)
+
+p_volcano
+ggsave("figures/RQ1_volcano.png", p_volcano, width = 7, height = 6, dpi = 300)
+```
+
+```{r}
+top_genes <- res_df |> filter(!is.na(padj)) |> arrange(padj) |> head(40) |> pull(gene)
+
+mat <- t(scale(t(assay(vsd)[top_genes, ])))          # z-score per gene
+
+annot <- data.frame(BOR = colData(vsd)$BOR,
+                    TMB = colData(vsd)$TMB,
+                    row.names = colnames(vsd))
+
+pheatmap(mat, annotation_col = annot, show_colnames = FALSE,
+         clustering_method = "ward.D2",
+         color = starfish_cont,
+         annotation_colors = list(BOR = col_BOR, TMB = starfish_cont),
+         main = "Top 40 DE genes (vst, row z-score)")
+
+pheatmap(mat, annotation_col = annot, show_colnames = FALSE,
+         clustering_method = "ward.D2",
+         color = starfish_cont,
+         annotation_colors = list(BOR = col_BOR, TMB = starfish_cont),
+         main = "Top 40 DE genes (vst, row z-score)",
+         filename = "figures/RQ1_heatmap_top40.png", width = 8, height = 9)
+```
+
+```{r}
+paper_genes <- c(
+  # CD8+ T-effector / IFN-gamma
+  "CD8A", "GZMA", "GZMB", "PRF1", "IFNG", "CXCL9", "CXCL10", "CXCL13", "TBX21",
+  # TGF-beta pathway
+  "TGFB1", "TGFBR2", "ACVR1"
+)
+
+res_df |> filter(gene %in% paper_genes) |>
+  select(gene, baseMean, log2FoldChange, padj, direction) |>
+  arrange(padj)
+```
+
+```{r}
+
+ranked_genes <- res$stat
+names(ranked_genes) <- rownames(res)
+ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+
+hallmark <- msigdbr(species = "Homo sapiens", collection = "H")
+hallmark <- split(hallmark$gene_symbol, hallmark$gs_name)
+
+go_bp <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
+go_bp <- split(go_bp$gene_symbol, go_bp$gs_name)
+
+set.seed(42)
+fgsea_hallmark <- fgsea(pathways = hallmark, stats = ranked_genes, nPermSimple = 10000)
+set.seed(42)
+fgsea_res      <- fgsea(pathways = go_bp,    stats = ranked_genes, nPermSimple = 10000)
+
+fgsea_hallmark |> filter(padj < 0.05) |> arrange(desc(NES)) |>
+  select(pathway, NES, padj, size)
+```
+
+```{r}
+p_hallmark <- fgsea_hallmark |>
+  filter(padj < 0.05) |>
+  mutate(pathway = str_remove(pathway, "HALLMARK_")) |>
+  ggplot(aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = col_BOR[["R"]], "FALSE" = col_BOR[["NR"]]),
+                    labels = c("TRUE" = "Enriched in R", "FALSE" = "Enriched in NR"),
+                    name = NULL) +
+  labs(x = NULL, y = "Normalized Enrichment Score (NES)",
+       title = "Hallmark gene sets (padj < 0.05)") +
+  theme_minimal(base_size = 12)
+
+p_hallmark
+ggsave("figures/RQ1_gsea_hallmark.png", p_hallmark, width = 8, height = 6, dpi = 300)
+
+
+topPathwaysUp   <- fgsea_res[ES > 0][head(order(pval), n = 10), pathway]
+topPathwaysDown <- fgsea_res[ES < 0][head(order(pval), n = 10), pathway]
+topPathways     <- c(topPathwaysUp, rev(topPathwaysDown))
+
+pdf("figures/RQ1_gsea_table.pdf", width = 20, height = 15)
+plotGseaTable(go_bp[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
+dev.off()
+
+png("figures/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
+plotGseaTable(go_bp[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
+dev.off()
+
+
+```
+
+```{r}
+cc <- !is.na(colData(dds)$TMB)
+dds_tmb <- dds[, cc]
+dds_tmb$log2TMB <- log2(dds_tmb$TMB + 1)
+design(dds_tmb) <- ~ log2TMB + BOR
+dds_tmb <- DESeq(dds_tmb)
+
+res_tmb <- results(dds_tmb, contrast = c("BOR", "R", "NR"), alpha = 0.05)
+cat("Samples with TMB:", sum(cc), "of", ncol(dds), "\n")
+summary(res_tmb)
+
+# How many of the original DE genes remain significant after adjusting for TMB?
+sig_main <- res_df |> filter(direction != "Not significant") |> pull(gene)
+mean(res_tmb[sig_main, "padj"] < 0.05, na.rm = TRUE)
+
+saveRDS(list(dds = dds, vsd = vsd, res = res, res_shr = res_shr,
+             coldata = coldata, fgsea_res = fgsea_res,
+             fgsea_hallmark = fgsea_hallmark),
+        "RQ1_objects.rds")
+
+sessionInfo()
 ```
 
 • Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
-
-```{r}
-
-```
-
-```{r}
-```
 
 ## RQ3 — Biomarker comparison (Giosuè)
 
