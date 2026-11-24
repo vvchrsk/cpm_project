@@ -14,6 +14,9 @@ library(dplyr)
 library(tidyr)
 library(ggrepel)
 library(pheatmap)
+library(gridExtra)
+library(PNWColors) 
+library(ggplot2)
 ```
 
 ## Q1
@@ -26,12 +29,42 @@ data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
 counts <- data[["counts"]]
 tpm <- data[["tpm"]]
 clinical <- data[["clinical"]]
+
+dim(counts); dim(tpm); str(clinical)
+
+filter <- dplyr::filter
+
+starfish      <- as.character(pnw_palette("Starfish", 7, type = "discrete"))
+starfish_cont <- as.character(pnw_palette("Starfish", 100, type = "continuous"))
+col_BOR       <- c(NR = starfish[2], R = starfish[6])   
+set.seed(42)
+dir.create("figures", showWarnings = FALSE)
 ```
 
 ```{r}
+ok_genes <- !is.na(rownames(counts)) & rownames(counts) != ""
+counts   <- counts[ok_genes, ]
+tpm      <- tpm[rownames(tpm) %in% rownames(counts), ]
 
-#following the framefowr of task 1
-head(counts)
+
+sum(duplicated(rownames(counts)))
+
+# DESeq2 needs integer counts
+all(counts == round(counts))
+
+
+
+coldata <- as.data.frame(clinical)
+rownames(coldata) <- coldata$sample_id
+coldata <- coldata[colnames(counts), ]                 
+stopifnot(all(rownames(coldata) == colnames(counts)))  
+
+
+coldata$BOR <- factor(coldata$BOR, levels = c("NR", "R"))
+table(coldata$BOR, useNA = "ifany")
+summary(coldata$TMB)
+
+
 sample_id <- colnames(counts)[10]
 sample_id %in% colnames(tpm)
 
@@ -40,115 +73,56 @@ df_sample <- data.frame(
   tpm    = tpm[, sample_id]
 )
 
-library(ggplot2)
-# library(gridExtra)
-
 p1 <- ggplot(df_sample, aes(x = counts)) +
-  geom_histogram(bins = 50, fill = "skyblue", color = "black", linewidth = 0.3) +
+  geom_histogram(bins = 50, fill = starfish[3], color = "black", linewidth = 0.1) +
   labs(title = "Raw counts", subtitle = sample_id, x = "Raw count", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p2 <- ggplot(df_sample, aes(x = log2(counts + 1))) +
-  geom_histogram(bins = 50, fill = "lightseagreen", color = "black", linewidth = 0.3) +
+  geom_histogram(bins = 50, fill = starfish[2], color = "black", linewidth = 0.1) +
   labs(title = "log2(counts + 1)", subtitle = sample_id, x = "log2(count + 1)", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p3 <- ggplot(df_sample, aes(x = tpm)) +
-  geom_histogram(bins = 50, fill = "skyblue", color = "black", linewidth = 0.3) +
-  labs(title = "tpm counts", subtitle = sample_id, x = "tpm count", y = "Number of genes") +
+  geom_histogram(bins = 50, fill = starfish[3], color = "black", linewidth = 0.1) +
+  labs(title = "TPM", subtitle = sample_id, x = "TPM", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p4 <- ggplot(df_sample, aes(x = log2(tpm + 1))) +
-  geom_histogram(bins = 50, fill = "lightseagreen", color = "black", linewidth = 0.3) +
-  labs(title = "log2(tpm + 1)", subtitle = sample_id, x = "log2(tpm + 1)", y = "Number of genes") +
+  geom_histogram(bins = 50, fill = starfish[2], color = "black", linewidth = 0.1) +
+  labs(title = "log2(TPM + 1)", subtitle = sample_id, x = "log2(TPM + 1)", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 ```{r}
-keep_count <- apply(counts, 1, sd) > 0
-counts_pca <- counts[keep_count, ]
-```
-
-```{r}
-pca_count <- prcomp(
-  t(counts_pca),
-  center = TRUE,
-  scale. = TRUE
-)
-```
-
-```{r}
-summary(pca_count)
-var_count <- 100 * pca_count$sdev^2 / sum(pca_count$sdev^2)
-```
-
-```{r}
-df_pca_count <- data.frame(
-  sample_id = rownames(pca_count$x),
-  PC1 = pca_count$x[, 1],
-  PC2 = pca_count$x[, 2]
-)
-
-```
-
-```{r}
-ggplot(df_pca_count, aes(x = PC1, y = PC2, color = clinical$BOR)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_point(size = 2) +
-  theme_classic(base_size = 13) +
-  labs(
-  title = "PCA based on raw counts",
-  x = paste0("PC1 (", round(var_count[1], 1), "%)"),
-  y = paste0("PC2 (", round(var_count[2], 1), "%)")
-)
 
 ```
 
 ```{r}
 
-gbm_logfpkm <- log2(tpm + 1)
+```
 
-## Remove genes with zero variance
-keep_fpkm <- apply(gbm_logfpkm, 1, sd) > 0
-
-gbm_logfpkm_pca <- gbm_logfpkm[keep_fpkm, ]
-
-pca_fpkm <- prcomp(
-  t(gbm_logfpkm_pca),
-  center = TRUE,
-  scale. = FALSE
-)
+```{r}
 
 ```
 
 ```{r}
 
-## Check how much variance is explained
-summary(pca_fpkm)
+```
 
-var_fpkm <- 100 * pca_fpkm$sdev^2 / sum(pca_fpkm$sdev^2)
+```{r}
+
+```
+
+```{r}
 
 
-## Plot PC1 and PC2
-df_pca_fpkm <- data.frame(
-  sample_id = rownames(pca_fpkm$x),
-  PC1 = pca_fpkm$x[, 1],
-  PC2 = pca_fpkm$x[, 2]
-)
+```
 
-ggplot(df_pca_fpkm, aes(x = PC1, y = PC2, color = clinical$BOR)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_point(size = 2) +
-  theme_classic(base_size = 13) +
-  labs(
-    title = "PCA based on log2(FPKM + 1)",
-    x = paste0("PC1 (", round(var_fpkm[1], 1), "%)"),
-    y = paste0("PC2 (", round(var_fpkm[2], 1), "%)")
-  )
+```{r}
+
 
 ```
 
@@ -167,167 +141,27 @@ ggplot(df_pca_fpkm, aes(x = PC1, y = PC2, color = clinical$BOR)) +
 ```
 
 ```{r}
-library(DESeq2)
 
-dds <- DESeqDataSetFromMatrix(countData = counts,
-                              colData   = coldata,
-                              design    = ~ BOR)
 
 ```
 
 ```{r}
-vsd <- vst(dds, blind = TRUE)
-plotPCA(vsd, intgroup = "BOR")
+
 ```
 
 • Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
 
 ```{r}
-pca_df <- plotPCA(vsd, intgroup = "BOR", returnData = TRUE)
-pca_df$TMB <- colData(vsd)$TMB
-pca_df$lib_size <- colSums(counts(dds))
+
 ```
 
 • Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
 
 ```{r}
-pca <- prcomp(t(assay(vsd)))
-df  <- data.frame(pca$x[, 1:5], BOR = vsd$BOR)
-ggplot(df, aes(BOR, PC3)) + geom_boxplot()
+
 ```
 
 ```{r}
-
-
-keep <- rowSums(counts(dds)) >= 10
-dds <- dds[keep,] # around 10,000 rows removed
-
-
-dds <- DESeq(dds)
-res <- results(dds, contrast = c("BOR", "R", "NR"), alpha = 0.05)
-summary(res)
-
-res_df <- as.data.frame(res) |>
-  rownames_to_column("gene") |>
-  filter(gene != "") |>
-  mutate(direction = case_when(
-    !is.na(padj) & padj < 0.05 & log2FoldChange >  1 ~ "Up in R",
-    !is.na(padj) & padj < 0.05 & log2FoldChange < -1 ~ "Up in NR",
-    TRUE ~ "Not significant"))
-table(res_df$direction)
-
-top_label <- res_df |> filter(direction != "Not significant") |>
-  arrange(padj) |> head(15)
-
-ggplot(res_df |> filter(!is.na(padj)),
-       aes(log2FoldChange, -log10(padj), color = direction)) +
-  geom_point(alpha = 0.6, size = 1.3) +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey50") +
-  geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "grey50") +
-  geom_text_repel(data = top_label, aes(label = gene), size = 3, max.overlaps = 20) +
-  scale_color_manual(values = c("Up in R" = "#d95f02", "Up in NR" = "#1b9e77",
-                                "Not significant" = "grey75")) +
-  labs(title = "Volcano plot: R vs NR", x = "log2 fold change (R vs NR)",
-       y = "-log10 adjusted p-value", color = NULL) +
-  theme_minimal(base_size = 13)
-
-#| fig-width: 8
-#| fig-height: 9
-top_genes <- res_df |> filter(!is.na(padj)) |> arrange(padj) |> head(40) |> pull(gene)
-
-mat <- t(scale(t(assay(vsd)[top_genes, ])))          # z-score per gene
-annot <- data.frame(BOR = coldata$BOR, row.names = colnames(mat))
-
-pheatmap(mat, annotation_col = annot, show_colnames = FALSE,
-         clustering_method = "ward.D2",
-         main = "Top 40 DE genes (vst, row z-score)")
-```
-
-```{r}
-
-
-
-
-# T6: Rank genes for GSEA -----------------------------------------------------------
-## Gene set enrichment analysis (GSEA) needs a single ranking metric per
-## gene rather than a significance cutoff. Extract the "stat" column from
-## the DESeq2 results (the DESeq2 test statistic) and name the resulting
-## vector with the gene IDs.
-##
-## Why might the "stat" column be a more suitable ranking metric for GSEA
-## than log2FoldChange alone? Remove any missing values before continuing.
-
-ranked_genes <- res$stat
-names(ranked_genes) <- rownames(res)
-
-## Remove missing values from the ranked gene list
-ranked_genes <- ranked_genes[!is.na(ranked_genes)]
-
-
-# T7: Run fgsea against MSigDB gene sets ---------------------------------------------
-## Load the GO Biological Process gene sets (collection "C5", subcollection
-## "BP") from MSigDB for human genes, and reshape them into the named-list
-## format that fgsea expects (one character vector of gene symbols per
-## pathway).
-##
-## Run fgsea() using these gene sets as pathways and your ranked gene list
-## as the ranking statistic.
-
-gene_sets <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP") # molecular signature database
-gene_sets <- split(x = gene_sets$gene_symbol, f = gene_sets$gs_name) # converts to a format needed by fgsea
-
-set.seed(42) # reproducible permutations
-fgsea_res <- fgsea(pathways = gene_sets,
-                   stats = ranked_genes, # stats: gene names for GSEA
-                   nPermSimple = 10000) # raise from the default 1000 to resolve more pathway p-values
-
-
-# T8: Visualize the enriched pathways -------------------------------------------------
-## a) Bar plot: take the top 5 pathways by adjusted p-value and plot their
-##    normalized enrichment scores (NES).
-##    What does a positive vs. a negative NES mean here?
-
-topPathways <- fgsea_res  |>
-  dplyr::arrange(padj) |>
-  dplyr::slice(1:5)
-
-ggplot(topPathways,
-       mapping = aes(x = reorder(pathway, NES),
-                     y = NES)) +
-  geom_col() +
-  coord_flip() +
-  labs(x = "Pathway",
-       y = "Normalized Enrichment Score (NES)",
-       title = "Top 5 Enriched Pathways") +
-  theme_minimal()
-
-## b) GSEA table: select the top 10 up- and top 10 down-regulated pathways
-##    by p-value, and use plotGseaTable() to visualize them together.
-##    Save the plot to both a PDF and a PNG file.
-
-number_of_top_pathways_up <- 10
-number_of_top_pathways_down <- 10
-
-topPathwaysUp <- fgsea_res[ES > 0][head(order(pval), n = number_of_top_pathways_up), pathway]
-
-topPathwaysDown <- fgsea_res[ES < 0][head(order(pval), n = number_of_top_pathways_down), pathway]
-
-topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
-
-
-pdf(file = "PMC_gsea_top_pathways.pdf", width = 20, height = 15)
-plotGseaTable(gene_sets[topPathways], stats = ranked_genes, fgseaRes = fgsea_res, gseaParam = 0.5)
-dev.off()
-
-png("my_results_gsea_top10pathways.png", width = 20, height = 15, units = "in", res = 300)
-plotGseaTable(gene_sets[topPathways], stats = ranked_genes, fgseaRes = fgsea_res, gseaParam = 0.5)
-dev.off()
-
-## c) Many enriched pathways overlap heavily in their gene content.
-##    collapsePathways() reduces the results to a smaller set of more
-##    independent "main" pathways. Use it, and list the main pathways
-##    ordered by NES.
-
 ```
 
 ## RQ3 — Biomarker comparison (Giosuè)
