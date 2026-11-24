@@ -17,6 +17,8 @@ library(pheatmap)
 library(gridExtra)
 library(PNWColors) 
 library(ggplot2)
+library(immunedeconv)
+library(limma)
 ```
 
 ## Q1
@@ -343,15 +345,12 @@ sessionInfo()
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
 ```{r}
-library(immunedeconv)
+
 library(ggplot2)
-library(limma)
+
 library(gridExtra)
 
-data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
-counts <- data[["counts"]]
-tpm <- data[["tpm"]]
-clinical <- data[["clinical"]]
+
 ```
 
 ```{r}
