@@ -335,6 +335,11 @@ dev.off()
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
 ```{r}
+library(immunedeconv)
+library(ggplot2)
+library(limma)
+library(gridExtra)
+
 data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
 counts <- data[["counts"]]
 tpm <- data[["tpm"]]
@@ -342,11 +347,6 @@ clinical <- data[["clinical"]]
 ```
 
 ```{r}
-library(immunedeconv)
-library(ggplot2)
-library(limma)
-library(gridExtra)
-
 all(clinical$pat_id %in% colnames(counts))
 
 # Reorder expression columns to match the phenotype table.
@@ -419,15 +419,6 @@ df <- data.frame(
   Response = factor(clinical$BOR))
 
 stopifnot(identical(df$sample, colnames(counts)))
-
-TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
-PD1_Response_test <- wilcox.test(PD1 ~ Response, data = df)
-GEP_Response_test <- wilcox.test(GEP_scores ~ Response, data = df)
-
-TMB_Response_test
-PD1_Response_test
-GEP_Response_test
-# All 3 significant p-values
 ```
 
 ```{r}
@@ -452,14 +443,57 @@ grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
 
 ```{r}
+TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
+PD1_Response_test <- wilcox.test(PD1 ~ Response, data = df)
+GEP_Response_test <- wilcox.test(GEP_scores ~ Response, data = df)
 
+TMB_Response_test # W = 564.5, p-value = 1.73e-05
+PD1_Response_test # W = 1211, p-value = 0.000721
+GEP_Response_test # W = 1199, p-value = 0.0006106
+
+aggregate(
+  cbind(TMB, PD1, GEP_scores) ~ Response,
+  data = df,
+  median
+)
+
+kendall_results <- lapply(c("TMB", "PD1", "GEP_scores"), function(v) {
+  test <- cor.test(
+    df[[v]],
+    as.numeric(df$Response == "R"),
+    method = "kendall",
+    exact = FALSE
+  )
+
+  data.frame(
+    Biomarker = v,
+    Kendall_tau = unname(test$estimate),
+    p_value = test$p.value
+  )
+})
+
+do.call(rbind, kendall_results)
 ```
+
+Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders), and it does not require the biomarker values to follow a normal distribution.
+
+All three biomarkers showed statistically significant differences between response groups (p \< 0.001), with higher median values in responders. TMB increased from 7 in non-responders to 14 in responders, PDCD1 expression from 18 to 42, and the GEP score from -0.26 to 0.31.
+
+Kendall's rank correlation was used to assess the direction and strength of the association between each biomarker and treatment response. This method is suitable because response is a binary variable (NR or R), and it does not assume a linear relationship or normally distributed biomarker values.
+
+All three biomarkers showed statistically significant positive associations with treatment response. TMB had the highest correlation (τ = 0.30), while PDCD1 and GEP showed weaker associations (τ = 0.20 for both).
+
+Despite statistical significance, the correlation coefficients indicate that all three associations are relatively weak, with TMB showing a modestly stronger association. Therefore, none of the biomarkers individually demonstrates a strong association with treatment response.
 
 • Explain the biological information captured by each biomarker and discuss their relative strengths and limitations
 
-```{r}
+**Tumor Mutational Burden (TMB)** measures the number of somatic mutations per megabase of tumor DNA. A higher TMB can increase the likelihood of generating neoantigens, which may be recognized by the immune system and trigger an anti-tumor response. Its main strength is that it provides an indication of the potential immunogenicity of a tumor; however, not all mutations generate immunogenic neoantigens, and TMB does not directly measure immune cell infiltration or activity.
 
-```
+**PDCD1 expression** measures the expression of the gene encoding PD-1, an immune checkpoint receptor primarily expressed on activated T cells that regulates immune responses. Its relevance is particularly important in the context of immune checkpoint inhibitor treatment, as blocking the PD-1/PD-L1 pathway can restore aspects of anti-tumor immunity. However, elevated PDCD1 expression alone cannot distinguish productive immune activation from dysfunctional or exhausted T cells.
+
+**T-cell-inflamed Gene Expression Profile (GEP)** summarizes the expression of 18 immune-related genes involved in T-cell infiltration, cytotoxic activity, antigen presentation and interferon signalling. It therefore provides a broader representation of the immune state of the tumor microenvironment. Its main strength is that it captures multiple aspects of anti-tumor immunity rather than relying on a single gene. However, bulk gene expression cannot distinguish between different cell populations, and averaging standardized expression values may conceal differences between individual immune pathways.
+
+Overall, the three biomarkers capture complementary aspects of tumor immunology: TMB reflects the potential for tumor antigen generation, PDCD1 reflects immune checkpoint activity, and GEP reflects the overall immune activity of the tumor microenvironment. Although TMB showed the strongest association with treatment response in our analysis, all three associations were relatively weak. Combining these biomarkers could therefore provide a more comprehensive characterization of tumor immunogenicity and immune activity than relying on any single biomarker.
 
 ## RQ4 — The influence of tumor purity on immune-related biomarkers (Zoja)
 
