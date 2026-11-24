@@ -541,7 +541,7 @@ summary(est$purity)
 
 ### Biomarkers
 
-- needs q2
+-   needs q2
 
 ### does the purity differ between the response groups
 
@@ -549,22 +549,22 @@ summary(est$purity)
 
 ### biomarker-respose association with and without urity
 
-- odds ration,likelihood ratio
+-   odds ration,likelihood ratio
 
-### Visuals 
+### Visuals
 
 Discussion points (claude for now\<3)
 
 \- \*\*Why purity matters in bulk RNA-seq.\*\* Each sample is a mixture of cells. Lower purity means more immune and stromal RNA, so PDCD1 and the GEP partly measure \*how much non-tumour tissue was sampled\*, not only how inflamed the tumour is.
 
- - \*\*Could purity explain the RQ2/RQ3 results?\*\* Only if purity differs between response groups \*and\* correlates with the marker. Section 1 and section 2 test those two conditions separately. A marker whose OR barely changes after adjustment is robust to purity.
+-   \*\*Could purity explain the RQ2/RQ3 results?\*\* Only if purity differs between response groups \*and\* correlates with the marker. Section 1 and section 2 test those two conditions separately. A marker whose OR barely changes after adjustment is robust to purity.
 
 \- \*\*TMB.\*\* TMB comes from DNA sequencing, not from RNA. Low purity lowers variant allele fractions, so it can make the measured TMB lower than the real one. TMB is affected through a different mechanism than the RNA markers.
 
 \- \*\*Adjusting is not automatically better.\*\*
 
- - ESTIMATE purity is computed partly \*from immune genes\*, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response. This is over-adjustment.  - Infiltration is part of the causal path: an inflamed tumour \*is\* a lower-purity tumour.
+-   ESTIMATE purity is computed partly \*from immune genes\*, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response. This is over-adjustment. - Infiltration is part of the causal path: an inflamed tumour \*is\* a lower-purity tumour.
 
- - Stroma also matters (Mariathasan: TGFβ-rich, T-cell-excluding stroma predicts non-response), so low purity can mean "inflamed" or "excluded".  - ESTIMATE purity on RNA-seq is an approximation without a reference such as pathologist estimates or ABSOLUTE.
+-   Stroma also matters (Mariathasan: TGFβ-rich, T-cell-excluding stroma predicts non-response), so low purity can mean "inflamed" or "excluded". - ESTIMATE purity on RNA-seq is an approximation without a reference such as pathologist estimates or ABSOLUTE.
 
 \- \*\*Better alternatives\*\* include deconvolution of cell fractions (e.g. CIBERSORTx, quanTIseq) and spatial phenotyping (inflamed / excluded / desert, as in the paper).
