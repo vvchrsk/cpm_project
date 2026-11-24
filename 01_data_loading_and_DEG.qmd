@@ -52,8 +52,6 @@ sum(duplicated(rownames(counts)))
 # DESeq2 needs integer counts
 all(counts == round(counts))
 
-
-
 coldata <- as.data.frame(clinical)
 rownames(coldata) <- coldata$sample_id
 coldata <- coldata[colnames(counts), ]                 
@@ -97,28 +95,105 @@ grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 ```{r}
+lib_df <- data.frame(sample = colnames(counts), lib_size = colSums(counts) / 1e6)
 
+ggplot(lib_df, aes(x = lib_size)) +
+  geom_histogram(bins = 30, fill = starfish[4], color = "black") +
+  labs(x = "Library size (millions of reads)", y = "Number of samples") +
+  theme_classic(base_size = 13)
 ```
 
 ```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData   = coldata,
+                              design    = ~ BOR)
 
+n_before <- nrow(dds)
+keep <- rowSums(counts(dds)) >= 10
+dds  <- dds[keep, ]
+cat("Genes before filtering:", n_before, "| after:", nrow(dds), "\n")
 ```
 
 ```{r}
+vsd <- vst(dds, blind = TRUE)
 
+pca_df <- plotPCA(vsd, intgroup = "BOR", returnData = TRUE)
+percent_var <- round(100 * attr(pca_df, "percentVar"), 1)
+
+pca_df$TMB      <- coldata[pca_df$name, "TMB"]
+pca_df$lib_size <- colSums(counts(dds))[pca_df$name] / 1e6
+
+p_pca_bor <- ggplot(pca_df, aes(PC1, PC2, color = BOR)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_color_manual(values = col_BOR) +
+  labs(title = "PCA (vst) coloured by response",
+       x = paste0("PC1 (", percent_var[1], "%)"),
+       y = paste0("PC2 (", percent_var[2], "%)"),
+       color = "Response") +
+  theme_classic(base_size = 13)
+
+p_pca_tmb <- ggplot(pca_df, aes(PC1, PC2, color = log2(TMB + 1))) +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_color_gradientn(colors = starfish_cont, na.value = "grey80") +
+  labs(title = "PCA (vst) coloured by TMB",
+       x = paste0("PC1 (", percent_var[1], "%)"),
+       y = paste0("PC2 (", percent_var[2], "%)"),
+       color = "log2(TMB + 1)") +
+  theme_classic(base_size = 13)
+
+grid.arrange(p_pca_bor, p_pca_tmb, ncol = 2)
+ggsave("figures/RQ1_pca_response_tmb.png",
+       arrangeGrob(p_pca_bor, p_pca_tmb, ncol = 2), width = 11, height = 4.5, dpi = 300)
 ```
 
 ```{r}
-
+ggplot(pca_df, aes(PC1, PC2, color = lib_size)) +
+  geom_point(size = 2) +
+  scale_color_gradientn(colors = starfish_cont) +
+  labs(title = "PCA (vst) coloured by library size", color = "Library size (M)") +
+  theme_classic(base_size = 13)
 ```
 
 ```{r}
+top500  <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 500)
+pca_all <- prcomp(t(assay(vsd)[top500, ]))
 
+pc_df <- data.frame(pca_all$x[, 1:5], BOR = vsd$BOR) |>
+  pivot_longer(-BOR, names_to = "PC", values_to = "score")
+
+ggplot(pc_df, aes(BOR, score, fill = BOR)) +
+  geom_boxplot(outlier.size = 0.5) +
+  facet_wrap(~ PC, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = col_BOR) +
+  theme_classic(base_size = 12) + theme(legend.position = "none")
+
+pc_df |> group_by(PC) |>
+  summarise(p = wilcox.test(score ~ BOR)$p.value) |>
+  mutate(padj = p.adjust(p, method = "BH"))
 ```
 
 ```{r}
+dds <- DESeq(dds)
+resultsNames(dds) 
+
+res <- results(dds, contrast = c("BOR", "R", "NR"), alpha = 0.05)
+summary(res)
+
+res_shr <- lfcShrink(dds, contrast = c("BOR", "R", "NR"), res = res, type = "normal")
+res_df <- as.data.frame(res_shr) |>
+  rownames_to_column("gene") |>
+  mutate(direction = case_when(
+    !is.na(padj) & padj < 0.05 & log2FoldChange >  1 ~ "Up in R",
+    !is.na(padj) & padj < 0.05 & log2FoldChange < -1 ~ "Up in NR",
+    TRUE ~ "Not significant"))
+
+table(res_df$direction)
 
 
+res_df |> filter(direction != "Not significant") |> arrange(padj) |>
+  write_csv("RQ1_DE_genes_significant.csv")
 ```
 
 ```{r}
