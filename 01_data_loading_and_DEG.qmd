@@ -428,25 +428,6 @@ df <- data.frame(
 stopifnot(identical(df$sample, colnames(counts)))
 ```
 
-```{r}
-TMB_plot <- plot_Response_boxplot(df, 
-                                  "TMB", 
-                                  "Tumor mutational burden", 
-                                  TMB_Response_test)
-
-PD1_plot <- plot_Response_boxplot(df, 
-                                  "PD1", 
-                                  "PDCD1 expression", 
-                                  PD1_Response_test)
-
-GEP_plot <- plot_Response_boxplot(df, 
-                                  "GEP_scores", 
-                                  "T cell–inflamed GEP score", 
-                                  GEP_Response_test)
-
-grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
-```
-
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
 
 ```{r}
@@ -480,6 +461,22 @@ kendall_results <- lapply(c("TMB", "PD1", "GEP_scores"), function(v) {
 })
 
 do.call(rbind, kendall_results)
+TMB_plot <- plot_Response_boxplot(df, 
+                                  "TMB", 
+                                  "Tumor mutational burden", 
+                                  TMB_Response_test)
+
+PD1_plot <- plot_Response_boxplot(df, 
+                                  "PD1", 
+                                  "PDCD1 expression", 
+                                  PD1_Response_test)
+
+GEP_plot <- plot_Response_boxplot(df, 
+                                  "GEP_scores", 
+                                  "T cell–inflamed GEP score", 
+                                  GEP_Response_test)
+
+grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 ```
 
 Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders), and it does not require the biomarker values to follow a normal distribution.
