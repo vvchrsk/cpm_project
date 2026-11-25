@@ -282,11 +282,30 @@ ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
 
-hallmark <- msigdbr(species = "Homo sapiens", collection = "H")
+# here because this horrible server does not accept
+get_msig <- function(coll) {
+  if ("collection" %in% names(formals(msigdbr))) {
+    msigdbr(species = "Homo sapiens", collection = coll)
+  } else {
+    msigdbr(species = "Homo sapiens", category = coll)
+  }
+}
+
+hallmark <- get_msig("H")
 hallmark <- split(hallmark$gene_symbol, hallmark$gs_name)
 
-go_bp <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
+go_bp <- get_msig("C5")
+go_sub <- if ("gs_subcollection" %in% names(go_bp)) go_bp$gs_subcollection else go_bp$gs_subcat
+go_bp  <- go_bp[go_sub %in% c("GO:BP", "BP"), ]          # GO Biological Process only
+stopifnot(nrow(go_bp) > 0)
 go_bp <- split(go_bp$gene_symbol, go_bp$gs_name)
+
+# works locally i think
+#hallmark <- msigdbr(species = "Homo sapiens", collection = "H")
+#hallmark <- split(hallmark$gene_symbol, hallmark$gs_name)
+
+#go_bp <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
+#go_bp <- split(go_bp$gene_symbol, go_bp$gs_name)
 
 set.seed(42)
 fgsea_hallmark <- fgsea(pathways = hallmark, stats = ranked_genes, nPermSimple = 10000)
@@ -935,7 +954,7 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 
 -   The score cannot see where the T cells are. Mariathasan et al. showed TGF-β-rich stroma confines T cells to the tumour periphery, and bulk RNA-seq cannot separate an infiltrated tumour from an excluded one. Both score high; only one responds.
 -   PD-L1 is one brake among several. Resistance also runs through TGF-β, other checkpoints, Tregs and myeloid suppression, loss of antigen presentation (B2M, JAK/STAT), or WNT/β-catenin exclusion.
--   An inflamed tumour still needs something to recognise. Independence from TMB means a high-GEP tumour can carry few neoantigens.
+-   An inflamed tumour still needs something to recognise. Independence from TMB means a high-GEP tumour can carry few neoantigens.P
 -   The score is cohort-relative. Z-scoring within these 192 patients gives a ranking within the cohort, so published cut-offs do not apply.
 -   The genes are not tumour-specific. Expression is diluted by how much immune and stromal tissue the biopsy contained, which is the purity problem taken up in RQ4.
 -   The endpoint is the easiest contrast: complete response against progressive disease, 25 responders, intermediates excluded. Discrimination across the full spectrum would be weaker.
@@ -1338,7 +1357,13 @@ Missingness is non-informative (response 14.0% with TMB vs 9.5% without, *p* = 0
 
 How might differences in tumor purity influence the expression of immune-related biomarkers and their observed associations with treatment response?
 
-Bulk RNA-seq measures a mixture of tumour, immune and stromal cells. PDCD1 and the GEP genes are expressed mainly by immune cells, so a sample with more immune tissue (lower purity) will show higher values. We estimate purity, check whether it differs between response groups and correlates with each biomarker, and compare the biomarker–response associations with and without adjustment.
+Bulk RNA-seq measures a mixture of tumour, immune and stromal cells. Low purity sample contains more immune tissue, therefore will show higher values of PDCD1 and GEP genes which are expressed mainly by immune cells.
+
+Purity estimation approach:
+- run ESTIMATE
+- check if it differs etween NR and R and correlate between biomarkers
+- compare the biomarker-response association with and without adjustment
+
 
 ```{r}
 # Align clinical data and expression (join everything by sample ID)
@@ -1351,34 +1376,20 @@ clin <- clinical |>
 log_tpm <- log2(as.matrix(tpm[, clin$sample_id]) + 1)
 stopifnot(identical(colnames(log_tpm), clin$sample_id))
 
-clin |> count(BOR)
+clin |> dplyr::count(BOR)
 ```
-
+*Note: There is an imbalance between the number of NR-167 and R-25 that may limit the test below*
 ```{r}
-# Biomarkers on log2(TPM + 1); the GEP is the same 18-gene score as in RQ2
-GEP_genes <- c("CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
-               "CXCL9", "CXCR6", "HLA-DQA1", "HLA-DRB1", "HLA-E",
-               "IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1", "TIGIT")
 
-expr_long <- log_tpm |>
-  as_tibble(rownames = "gene") |>
-  filter(gene %in% GEP_genes) |>
-  pivot_longer(-gene, names_to = "sample_id", values_to = "expr")
+# GEP from RQ2 score; PDCD1 on log2(TPM + 1)
+gep <- df_rq2 |>
+  as_tibble() |>
+  transmute(sample_id = sample, GEP = gep_score)
 
-stopifnot(n_distinct(expr_long$gene) == length(GEP_genes))
+pdcd1 <- tibble(sample_id = colnames(log_tpm),
+                PDCD1     = log_tpm["PDCD1", ])
 
-gep <- expr_long |>
-  group_by(gene) |>
-  mutate(z = (expr - mean(expr)) / sd(expr)) |>
-  group_by(sample_id) |>
-  summarise(GEP = mean(z))
-
-pdcd1 <- expr_long |>
-  filter(gene == "PDCD1") |>
-  dplyr::select(sample_id, PDCD1 = expr)
-
-# TMB is right-skewed: log2-transform it, as in Exercise 7.
-# Rank-based tests (Wilcoxon, Spearman) are unaffected by this.
+# TMB is right-skewed: log2-transform (noteffecting Wilcoxon and Spearman)
 markers <- clin |>
   transmute(sample_id, BOR, TMB = log2(TMB + 1)) |>
   left_join(pdcd1, by = "sample_id") |>
@@ -1387,7 +1398,7 @@ markers <- clin |>
 
 ### Estimating tumor purity with ESTIMATE
 
-ESTIMATE scores each sample for a 141-gene stromal signature and a 141-gene immune signature using single-sample GSEA. Their sum is the ESTIMATE score: the more non-tumour signal, the lower the inferred purity. The score is converted to purity with a cosine formula that was calibrated on Affymetrix microarrays (as in Exercise 4). On RNA-seq this is an approximation, so we treat purity as a relative ranking of samples rather than as absolute tumour-cell fractions.
+ESTIMATE uses single-sample GSEA to for a 141-gene stromal signature and a 141-gene immune signature,and calculates ESTIMATE score which is their sum. Based on exercise 4 this score was converted to purity with a cosine formula that was calibrated on Affymetrix microarrays. On RNA-seq, purity is representing relative ranking of samples.
 
 ```{r}
 est <- log_tpm |>
@@ -1398,15 +1409,15 @@ est <- log_tpm |>
   as_tibble() |>
   mutate(purity = cos(0.6049872018 + 0.0001467884 * estimate))
 
-est |> summarise(across(purity, list(min = min, median = median, max = max)))
-# check: values should be within 0–1
+est |> summarise(across(purity, list(min = min, median = median, max = max))) # values should be within 0–1
 
-# Join by sample ID, never by row order
+# Join by sample ID
 dat <- markers |>
   left_join(est, by = c("sample_id" = "sample"))
 
 stopifnot(!anyNA(dat$purity))
 ```
+Purity score in all the samples ranges between 0.29 to 0.96
 
 ### Does purity differ between response groups?
 
@@ -1424,6 +1435,7 @@ p_purity <- ggplot(dat, aes(BOR, purity, fill = BOR)) +
   labs(x = "Response", y = "ESTIMATE purity", title = "Purity by response") +
   theme_minimal()
 ```
+Both respond groups contain approximately the same ammount of non-tumour tissue, 0.65 for NR and 0.62 for R. (Wilcoxon p = 0.17)
 
 ### Does purity relate to each biomarker?
 
@@ -1455,7 +1467,11 @@ p_scatter <- dat |>
   labs(x = "ESTIMATE purity", y = NULL, colour = "Response",
        caption = "PDCD1: log2(TPM + 1); GEP: mean z-score; TMB: log2(mut/Mb + 1)") +
   theme_minimal()
+
+p_scatter
 ```
+
+*PDCD1 and GED fall as purity rises and correlates most strongly with immune score rather than stromal score. TMB with p = 1.45e-01 is barely related to purity. The increasing trend seen in the plot is a measurement effect as mutations are harder to detect with lower purity.*
 
 ### Biomarker–response association with and without purity
 
@@ -1526,7 +1542,9 @@ p_forest <- assoc_long |>
   labs(x = "Odds ratio for response (per 1 SD, log scale)", y = NULL,
        colour = NULL, title = "Biomarker–response association") +
   theme_minimal()
+p_forest
 ```
+*Adjusting for purity changes the odds ratio of PDCD1 to 43% and GEP by 74%, while adjusting for stromal changes had a smaller effect 9% and 21%. Low-purity samples carry both immune cell in favour of response, and stroma which is linked to non-response,so the crude associations partly cancel these out. TMB is almost unchanged (2-3%). All biomarkers remained informative beyond purity (LRT p ≤ 6 × 10⁻⁴)*
 
 ### Course-style adjustment (Exercise 4): residualise, then re-test
 
@@ -1550,6 +1568,7 @@ resid_tab <- c("PDCD1", "GEP", "TMB") |>
 
 resid_tab
 ```
+*After removing the part explained by purity, all three differ between response groups. This agrees with the regression results and Q2, purity does not explain the associations, for GEP the signal is clearer. *
 
 ### Summary figure
 
@@ -1564,22 +1583,21 @@ ggsave("figures/RQ4_purity_summary.png",
                    layout_matrix = rbind(c(1, 2), c(3, 3))),
        width = 12, height = 8, dpi = 300)
 ```
-
-### How to read the results
-
-- Purity can only confound a biomarker if it differs between responders and non-responders *and* correlates with that biomarker. The first two analyses test these two conditions separately.
-- If the odds ratio barely changes after adjustment, the association does not depend on purity.
-- If the odds ratio falls after adjusting for purity but not for the stromal score, the drop comes from removing immune signal (over-adjustment), not from correcting a confounder.
-- TMB is measured from DNA, so it is affected through a different route: low purity lowers variant allele fractions, so fewer mutations are called.
+**Summary of RQ4: top left - purity by response, top right -crude and purity- or stroma-adjusted odds ratios per SD, bottom -each biomarker against purity, coloured by response. Adjustment strengthens the immune biomarkers rather than weakening them, while TMB is unaffected.*
 
 ### Discussion
 
-- **Why purity matters in bulk RNA-seq.** Each sample is a mixture of cells. Lower purity means more immune and stromal RNA, so PDCD1 and the GEP partly measure how much non-tumour tissue was sampled, not only how inflamed the tumour is.
-- **Could purity explain the RQ2/RQ3 results?** Only if purity differs between response groups and correlates with the marker. A marker whose odds ratio barely changes after adjustment is robust to purity.
-- **TMB.** TMB comes from DNA sequencing, not RNA. Low purity lowers variant allele fractions and can make the measured TMB lower than the true value, so TMB is affected through a different mechanism than the RNA markers.
+- **Why purity matters in bulk RNA-seq.** 
+Lower purity means more immune and stromal RNA, so PDCD1 and the GEP have higher values and partly measure how much non-tumour tissue was sampled, not only how inflamed the tumour is.
+
+- **Could purity explain the RQ2/RQ3 results?** 
+Not really, all three biomarkers stayed associated with response after adjustment with logistic regression and residual approach. In the crude analysis stroma associated with non response nad immune cells associated with response partly cancel out so the immune signal is underestimated.
+
+- **TMB** TMB comes from DNA sequencing, not RNA, so tissue composition barerly changes its association with response, in low purity TMB may be harder to detect so the measured values may be underestimated.
+
 - **Adjusting is not automatically better.**
-  - ESTIMATE purity is computed partly from immune genes, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response (over-adjustment).
-  - Infiltration lies on the causal path to response: an inflamed tumour *is* a lower-purity tumour.
-  - Stroma also matters. In Mariathasan et al., TGF-β-rich stroma that excludes T cells predicts non-response, so low purity can mean "inflamed" or "excluded". Splitting ESTIMATE into immune and stromal scores separates the two.
-  - ESTIMATE purity on RNA-seq is an approximation, with no pathology or DNA-based estimate (e.g. ABSOLUTE) to validate it.
-- **Better alternatives** include cell-type deconvolution (e.g. quanTIseq, CIBERSORTx) and spatial immune phenotypes (inflamed / excluded / desert), as in the paper.
+  - ESTIMATE purity is computed partly from immune genes, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response 
+  - TGF-β-rich stroma excludes T cells predicts non-response, so low purity can mean inflamed or excluded. Adjusted and crude estimates should be reported together rather than one replacing the other.
+  - ESTIMATE purity on RNA-seq is an approximation, with no pathology or DNA-based estimate (e.g. ABSOLUTE) to validate it. With 25 responders the adjusted odds ratios are imprecise. 
+  
+- **Alternatives** include cell-type deconvolution (e.g. quanTIseq, CIBERSORTx) and spatial immune phenotypes (inflamed / excluded / desert), as in the paper, would separate the immune and stromal effects more directly.
