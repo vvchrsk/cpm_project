@@ -23,8 +23,7 @@ library(limma)
 
 ## Q1
 
-• Prepare and explore the gene-expression data, including appropriate filtering and normalization.
-
+Loading the IMvigor210 data and preparing it for analysis by removing the genes without a valid name, checking that the clinical table matches the expression columns, filtering out genes with very low counts, and normalizing the data with a variance-stabilizing transformation so that samples can be compared fairly.
 ```{r}
 # Use whichever copy of the dataset exists on this machine, so the document
 # runs unchanged on the server and on each of our laptops.
@@ -186,7 +185,7 @@ pc_df |> group_by(PC) |>
   mutate(padj = p.adjust(p, method = "BH"))
 ```
 
-• Perform differential expression analysis between responders/non-responder using DESeq2, and identify significantly differentially expressed genes. Visualize the results using e.g. volcano plots and heatmaps of selected genes.
+Comparing the R vs NR using DESeq2 to identify genes significantly different among the groups.  
 
 ```{r}
 dds <- DESeq(dds)
@@ -210,7 +209,7 @@ res_df |> filter(direction != "Not significant") |> arrange(padj) |>
   write_csv("RQ1_DE_genes_significant.csv")
 ```
 
-• Investigate the biological functions of differentially expressed genes and discuss their potential relevance to immunotherapy response.
+Gene set enrichment analysis shows which pathways are higher in responders or non-responders, telling what the differentially expressed genes do, which then relates to how the immune system responds to immunotherapy.
 
 ```{r}
 top_label <- res_df |> filter(direction != "Not significant") |>
