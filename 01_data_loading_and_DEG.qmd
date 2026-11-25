@@ -352,7 +352,7 @@ saveRDS(list(dds = dds, vsd = vsd, res = res, res_shr = res_shr,
 sessionInfo()
 ```
 
-• Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
+# Differences in expression can be influenced by confounding factors such as tumour mutational burden, sample quality and tumour purity. Also, a gene that is differentially expressed is only associated with response; this does not show that the gene causes the response.
 
 ## RQ2 — Immune-related signatures (Dhruva)
 
