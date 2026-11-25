@@ -24,6 +24,7 @@ library(limma)
 ## Q1
 
 Loading the IMvigor210 data and preparing it for analysis by removing the genes without a valid name, checking that the clinical table matches the expression columns, filtering out genes with very low counts, and normalizing the data with a variance-stabilizing transformation so that samples can be compared fairly.
+
 ```{r}
 # Use whichever copy of the dataset exists on this machine, so the document
 # runs unchanged on the server and on each of our laptops.
@@ -158,6 +159,7 @@ grid.arrange(p_pca_bor, p_pca_tmb, ncol = 2)
 ggsave("figures/RQ1_pca_response_tmb.png",
        arrangeGrob(p_pca_bor, p_pca_tmb, ncol = 2), width = 11, height = 4.5, dpi = 300)
 ```
+#The PCA shows that responders and non-responders overlap almost completely along PC1 (17.7% of variance) and PC2 (10.8%), and TMB shows no gradient along either axis (grey points are the 42 samples without TMB). The main sources of variation in the data are therefore not response or TMB, and the difference between responders and non-responders is subtle enough that it has to be found with gene-level differential expression testing. The samples form one continuous cloud with no clear outliers, so none were removed.
 
 ```{r}
 ggplot(pca_df, aes(PC1, PC2, color = lib_size)) +
