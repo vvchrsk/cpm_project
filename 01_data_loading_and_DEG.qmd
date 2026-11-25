@@ -14,6 +14,12 @@ library(dplyr)
 library(tidyr)
 library(ggrepel)
 library(pheatmap)
+library(gridExtra)
+library(PNWColors) 
+library(ggplot2)
+library(immunedeconv)
+library(limma)
+library(broom)
 ```
 
 ## Q1
@@ -36,12 +42,40 @@ data <- readRDS(data_path)
 counts <- data[["counts"]]
 tpm <- data[["tpm"]]
 clinical <- data[["clinical"]]
+
+dim(counts); dim(tpm); str(clinical)
+
+filter <- dplyr::filter
+
+starfish      <- as.character(pnw_palette("Starfish", 7, type = "discrete"))
+starfish_cont <- as.character(pnw_palette("Starfish", 100, type = "continuous"))
+col_BOR       <- c(NR = starfish[2], R = starfish[6])   
+set.seed(42)
+dir.create("figures", showWarnings = FALSE)
 ```
 
 ```{r}
+ok_genes <- !is.na(rownames(counts)) & rownames(counts) != ""
+counts   <- counts[ok_genes, ]
+tpm      <- tpm[rownames(tpm) %in% rownames(counts), ]
 
-#following the framefowr of task 1
-head(counts)
+
+sum(duplicated(rownames(counts)))
+
+# DESeq2 needs integer counts
+all(counts == round(counts))
+
+coldata <- as.data.frame(clinical)
+rownames(coldata) <- coldata$sample_id
+coldata <- coldata[colnames(counts), ]                 
+stopifnot(all(rownames(coldata) == colnames(counts)))  
+
+
+coldata$BOR <- factor(coldata$BOR, levels = c("NR", "R"))
+table(coldata$BOR, useNA = "ifany")
+summary(coldata$TMB)
+
+
 sample_id <- colnames(counts)[10]
 sample_id %in% colnames(tpm)
 
@@ -50,61 +84,59 @@ df_sample <- data.frame(
   tpm    = tpm[, sample_id]
 )
 
-library(ggplot2)
-# library(gridExtra)
-
 p1 <- ggplot(df_sample, aes(x = counts)) +
-  geom_histogram(bins = 50, fill = "skyblue", color = "black", linewidth = 0.3) +
+  geom_histogram(bins = 50, fill = starfish[3], color = "black", linewidth = 0.1) +
   labs(title = "Raw counts", subtitle = sample_id, x = "Raw count", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p2 <- ggplot(df_sample, aes(x = log2(counts + 1))) +
-  geom_histogram(bins = 50, fill = "lightseagreen", color = "black", linewidth = 0.3) +
+  geom_histogram(bins = 50, fill = starfish[2], color = "black", linewidth = 0.1) +
   labs(title = "log2(counts + 1)", subtitle = sample_id, x = "log2(count + 1)", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p3 <- ggplot(df_sample, aes(x = tpm)) +
-  geom_histogram(bins = 50, fill = "skyblue", color = "black", linewidth = 0.3) +
-  labs(title = "tpm counts", subtitle = sample_id, x = "tpm count", y = "Number of genes") +
+  geom_histogram(bins = 50, fill = starfish[3], color = "black", linewidth = 0.1) +
+  labs(title = "TPM", subtitle = sample_id, x = "TPM", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 p4 <- ggplot(df_sample, aes(x = log2(tpm + 1))) +
-  geom_histogram(bins = 50, fill = "lightseagreen", color = "black", linewidth = 0.3) +
-  labs(title = "log2(tpm + 1)", subtitle = sample_id, x = "log2(tpm + 1)", y = "Number of genes") +
+  geom_histogram(bins = 50, fill = starfish[2], color = "black", linewidth = 0.1) +
+  labs(title = "log2(TPM + 1)", subtitle = sample_id, x = "log2(TPM + 1)", y = "Number of genes") +
   theme_classic(base_size = 13)
 
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
 
 ```{r}
-keep_count <- apply(counts, 1, sd) > 0
-counts_pca <- counts[keep_count, ]
+lib_df <- data.frame(sample = colnames(counts), lib_size = colSums(counts) / 1e6)
+
+ggplot(lib_df, aes(x = lib_size)) +
+  geom_histogram(bins = 30, fill = starfish[4], color = "black") +
+  labs(x = "Library size (millions of reads)", y = "Number of samples") +
+  theme_classic(base_size = 13)
 ```
 
 ```{r}
-pca_count <- prcomp(
-  t(counts_pca),
-  center = TRUE,
-  scale. = TRUE
-)
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData   = coldata,
+                              design    = ~ BOR)
+
+n_before <- nrow(dds)
+keep <- rowSums(counts(dds)) >= 10
+dds  <- dds[keep, ]
+cat("Genes before filtering:", n_before, "| after:", nrow(dds), "\n")
 ```
 
 ```{r}
-summary(pca_count)
-var_count <- 100 * pca_count$sdev^2 / sum(pca_count$sdev^2)
-```
+vsd <- vst(dds, blind = TRUE)
 
-```{r}
-df_pca_count <- data.frame(
-  sample_id = rownames(pca_count$x),
-  PC1 = pca_count$x[, 1],
-  PC2 = pca_count$x[, 2]
-)
+pca_df <- plotPCA(vsd, intgroup = "BOR", returnData = TRUE)
+percent_var <- round(100 * attr(pca_df, "percentVar"), 1)
 
-```
+pca_df$TMB      <- coldata[pca_df$name, "TMB"]
+pca_df$lib_size <- colSums(counts(dds))[pca_df$name] / 1e6
 
-```{r}
-ggplot(df_pca_count, aes(x = PC1, y = PC2, color = clinical$BOR)) +
+p_pca_bor <- ggplot(pca_df, aes(PC1, PC2, color = BOR)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
   geom_point(size = 2, alpha = 0.8) +
@@ -128,248 +160,175 @@ grid.arrange(p_pca_bor, p_pca_tmb, ncol = 2)
 ggsave("figures/RQ1_pca_response_tmb.png",
        arrangeGrob(p_pca_bor, p_pca_tmb, ncol = 2), width = 11, height = 4.5, dpi = 300)
 ```
-#The PCA shows that responders and non-responders overlap almost completely along PC1 (17.7% of variance) and PC2 (10.8%), and TMB shows no gradient along either axis (grey points are the 42 samples without TMB). The main sources of variation in the data are therefore not response or TMB, and the difference between responders and non-responders is subtle enough that it has to be found with gene-level differential expression testing. The samples form one continuous cloud with no clear outliers, so none were removed.
+
+The PCA shows that responders and non-responders overlap almost completely along PC1 (17.7% of variance) and PC2 (10.8%), and TMB shows no gradient along either axis (grey points are the 42 samples without TMB). The main sources of variation in the data are therefore not response or TMB, and the difference between responders and non-responders is subtle enough that it has to be found with gene-level differential expression testing. The samples form one continuous cloud with no clear outliers, so none were removed.
 
 ```{r}
 ggplot(pca_df, aes(PC1, PC2, color = lib_size)) +
   geom_point(size = 2) +
-  theme_classic(base_size = 13) +
-  labs(
-  title = "PCA based on raw counts",
-  x = paste0("PC1 (", round(var_count[1], 1), "%)"),
-  y = paste0("PC2 (", round(var_count[2], 1), "%)")
-)
-
+  scale_color_gradientn(colors = starfish_cont) +
+  labs(title = "PCA (vst) coloured by library size", color = "Library size (M)") +
+  theme_classic(base_size = 13)
 ```
 
 ```{r}
+top500  <- head(order(rowVars(assay(vsd)), decreasing = TRUE), 500)
+pca_all <- prcomp(t(assay(vsd)[top500, ]))
 
-gbm_logfpkm <- log2(tpm + 1)
+pc_df <- data.frame(pca_all$x[, 1:5], BOR = vsd$BOR) |>
+  pivot_longer(-BOR, names_to = "PC", values_to = "score")
 
-## Remove genes with zero variance
-keep_fpkm <- apply(gbm_logfpkm, 1, sd) > 0
+ggplot(pc_df, aes(BOR, score, fill = BOR)) +
+  geom_boxplot(outlier.size = 0.5) +
+  facet_wrap(~ PC, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = col_BOR) +
+  theme_classic(base_size = 12) + theme(legend.position = "none")
 
-gbm_logfpkm_pca <- gbm_logfpkm[keep_fpkm, ]
-
-pca_fpkm <- prcomp(
-  t(gbm_logfpkm_pca),
-  center = TRUE,
-  scale. = FALSE
-)
-
-```
-
-```{r}
-
-## Check how much variance is explained
-summary(pca_fpkm)
-
-var_fpkm <- 100 * pca_fpkm$sdev^2 / sum(pca_fpkm$sdev^2)
-
-
-## Plot PC1 and PC2
-df_pca_fpkm <- data.frame(
-  sample_id = rownames(pca_fpkm$x),
-  PC1 = pca_fpkm$x[, 1],
-  PC2 = pca_fpkm$x[, 2]
-)
-
-ggplot(df_pca_fpkm, aes(x = PC1, y = PC2, color = clinical$BOR)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_point(size = 2) +
-  theme_classic(base_size = 13) +
-  labs(
-    title = "PCA based on log2(FPKM + 1)",
-    x = paste0("PC1 (", round(var_fpkm[1], 1), "%)"),
-    y = paste0("PC2 (", round(var_fpkm[2], 1), "%)")
-  )
-
+pc_df |> group_by(PC) |>
+  summarise(p = wilcox.test(score ~ BOR)$p.value) |>
+  mutate(padj = p.adjust(p, method = "BH"))
 ```
 
 Comparing the R vs NR using DESeq2 to identify genes significantly different among the groups.  
 
 ```{r}
+dds <- DESeq(dds)
+resultsNames(dds) 
 
-```
+res <- results(dds, contrast = c("BOR", "R", "NR"), alpha = 0.05)
+summary(res)
 
-```{r}
+res_shr <- lfcShrink(dds, contrast = c("BOR", "R", "NR"), res = res, type = "normal")
+res_df <- as.data.frame(res_shr) |>
+  rownames_to_column("gene") |>
+  mutate(direction = case_when(
+    !is.na(padj) & padj < 0.05 & log2FoldChange >  1 ~ "Up in R",
+    !is.na(padj) & padj < 0.05 & log2FoldChange < -1 ~ "Up in NR",
+    TRUE ~ "Not significant"))
 
-```
+table(res_df$direction)
 
-```{r}
 
-```
-
-```{r}
-library(DESeq2)
-
-dds <- DESeqDataSetFromMatrix(countData = counts,
-                              colData   = coldata,
-                              design    = ~ BOR)
-
-```
-
-```{r}
-vsd <- vst(dds, blind = TRUE)
-plotPCA(vsd, intgroup = "BOR")
+res_df |> filter(direction != "Not significant") |> arrange(padj) |>
+  write_csv("RQ1_DE_genes_significant.csv")
 ```
 
 Gene set enrichment analysis shows which pathways are higher in responders or non-responders, telling what the differentially expressed genes do, which then relates to how the immune system responds to immunotherapy.
 
 ```{r}
-pca_df <- plotPCA(vsd, intgroup = "BOR", returnData = TRUE)
-pca_df$TMB <- colData(vsd)$TMB
-pca_df$lib_size <- colSums(counts(dds))
-```
-
-• Discuss the limitations of the analysis, including potential confounding factors and why differential expression does not necessarily imply a causal role in treatment response.
-
-```{r}
-pca <- prcomp(t(assay(vsd)))
-df  <- data.frame(pca$x[, 1:5], BOR = vsd$BOR)
-ggplot(df, aes(BOR, PC3)) + geom_boxplot()
-```
-
-```{r}
-
-
-keep <- rowSums(counts(dds)) >= 10
-dds <- dds[keep,] # around 10,000 rows removed
-
-
-dds <- DESeq(dds)
-res <- results(dds, contrast = c("BOR", "R", "NR"), alpha = 0.05)
-summary(res)
-
-res_df <- as.data.frame(res) |>
-  rownames_to_column("gene") |>
-  filter(gene != "") |>
-  mutate(direction = case_when(
-    !is.na(padj) & padj < 0.05 & log2FoldChange >  1 ~ "Up in R",
-    !is.na(padj) & padj < 0.05 & log2FoldChange < -1 ~ "Up in NR",
-    TRUE ~ "Not significant"))
-table(res_df$direction)
-
 top_label <- res_df |> filter(direction != "Not significant") |>
   arrange(padj) |> head(15)
 
-ggplot(res_df |> filter(!is.na(padj)),
-       aes(log2FoldChange, -log10(padj), color = direction)) +
+p_volcano <- ggplot(res_df |> filter(!is.na(padj)),
+                    aes(log2FoldChange, -log10(padj), color = direction)) +
   geom_point(alpha = 0.6, size = 1.3) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey50") +
   geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "grey50") +
   geom_text_repel(data = top_label, aes(label = gene), size = 3, max.overlaps = 20) +
-  scale_color_manual(values = c("Up in R" = "#d95f02", "Up in NR" = "#1b9e77",
+  scale_color_manual(values = c("Up in R" = col_BOR[["R"]], "Up in NR" = col_BOR[["NR"]],
                                 "Not significant" = "grey75")) +
-  labs(title = "Volcano plot: R vs NR", x = "log2 fold change (R vs NR)",
+  labs(title = "Volcano plot: R vs NR",
+       x = "Shrunken log2 fold change (R vs NR)",
        y = "-log10 adjusted p-value", color = NULL) +
   theme_minimal(base_size = 13)
 
 p_volcano
 ggsave("figures/RQ1_volcano.png", p_volcano, width = 7, height = 6, dpi = 300)
 ```
+
 The volcano plot shows a modest set of differentially expressed genes. The strongest genes reach an adjusted p-value of about 10^-8. More genes are higher in non-responders (left) than in responders (right).
 
 The responder side includes immune-related genes such as CCL5, a chemokine that recruits T cells, and ZNF683, a marker of tissue-resident cytotoxic T cells. This fits the idea that responders have a more inflamed, T-cell-rich tumour. The non-responder side is dominated by epithelial and tumour-type genes (MUC6, PAX8, MMP7, TCN1, CP, C9, SERPINA5). MMP7 also points to tissue remodelling, which is consistent with a tumour environment that is less immune-active. The shrunken fold changes are mostly between 1 and 4, so the effects are moderate. With only 25 responders, power is limited, and the list should be seen as suggestive. The plot only shows association, not whether these genes cause the response.
 
 ```{r}
-#| fig-width: 8
-#| fig-height: 9
 top_genes <- res_df |> filter(!is.na(padj)) |> arrange(padj) |> head(40) |> pull(gene)
 
 mat <- t(scale(t(assay(vsd)[top_genes, ])))          # z-score per gene
-annot <- data.frame(BOR = coldata$BOR, row.names = colnames(mat))
+
+annot <- data.frame(BOR = colData(vsd)$BOR,
+                    TMB = colData(vsd)$TMB,
+                    row.names = colnames(vsd))
 
 pheatmap(mat, annotation_col = annot, show_colnames = FALSE,
          clustering_method = "ward.D2",
+         color = starfish_cont,
+         annotation_colors = list(BOR = col_BOR, TMB = starfish_cont),
          main = "Top 40 DE genes (vst, row z-score)")
+
+pheatmap(mat, annotation_col = annot, show_colnames = FALSE,
+         clustering_method = "ward.D2",
+         color = starfish_cont,
+         annotation_colors = list(BOR = col_BOR, TMB = starfish_cont),
+         main = "Top 40 DE genes (vst, row z-score)",
+         filename = "figures/RQ1_heatmap_top40.png", width = 8, height = 9)
+```
+
+```{r}
+paper_genes <- c(
+  # CD8+ T-effector / IFN-gamma
+  "CD8A", "GZMA", "GZMB", "PRF1", "IFNG", "CXCL9", "CXCL10", "CXCL13", "TBX21",
+  # TGF-beta pathway
+  "TGFB1", "TGFBR2", "ACVR1"
+)
+
+res_df |> filter(gene %in% paper_genes) |>
+  dplyr::select(gene, baseMean, log2FoldChange, padj, direction) |>
+  arrange(padj)
 ```
 
 ```{r}
 
-
-
-
-# T6: Rank genes for GSEA -----------------------------------------------------------
-## Gene set enrichment analysis (GSEA) needs a single ranking metric per
-## gene rather than a significance cutoff. Extract the "stat" column from
-## the DESeq2 results (the DESeq2 test statistic) and name the resulting
-## vector with the gene IDs.
-##
-## Why might the "stat" column be a more suitable ranking metric for GSEA
-## than log2FoldChange alone? Remove any missing values before continuing.
-
 ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
-
-## Remove missing values from the ranked gene list
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
 
+hallmark <- msigdbr(species = "Homo sapiens", collection = "H")
+hallmark <- split(hallmark$gene_symbol, hallmark$gs_name)
 
-# T7: Run fgsea against MSigDB gene sets ---------------------------------------------
-## Load the GO Biological Process gene sets (collection "C5", subcollection
-## "BP") from MSigDB for human genes, and reshape them into the named-list
-## format that fgsea expects (one character vector of gene symbols per
-## pathway).
-##
-## Run fgsea() using these gene sets as pathways and your ranked gene list
-## as the ranking statistic.
+go_bp <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP")
+go_bp <- split(go_bp$gene_symbol, go_bp$gs_name)
 
-gene_sets <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "BP") # molecular signature database
-gene_sets <- split(x = gene_sets$gene_symbol, f = gene_sets$gs_name) # converts to a format needed by fgsea
+set.seed(42)
+fgsea_hallmark <- fgsea(pathways = hallmark, stats = ranked_genes, nPermSimple = 10000)
+set.seed(42)
+fgsea_res      <- fgsea(pathways = go_bp,    stats = ranked_genes, nPermSimple = 10000)
 
-set.seed(42) # reproducible permutations
-fgsea_res <- fgsea(pathways = gene_sets,
-                   stats = ranked_genes, # stats: gene names for GSEA
-                   nPermSimple = 10000) # raise from the default 1000 to resolve more pathway p-values
+fgsea_hallmark |> filter(padj < 0.05) |> arrange(desc(NES)) |>
+  dplyr::select(pathway, NES, padj, size)
+```
 
-
-# T8: Visualize the enriched pathways -------------------------------------------------
-## a) Bar plot: take the top 5 pathways by adjusted p-value and plot their
-##    normalized enrichment scores (NES).
-##    What does a positive vs. a negative NES mean here?
-
-topPathways <- fgsea_res  |>
-  dplyr::arrange(padj) |>
-  dplyr::slice(1:5)
-
-ggplot(topPathways,
-       mapping = aes(x = reorder(pathway, NES),
-                     y = NES)) +
+```{r}
+p_hallmark <- fgsea_hallmark |>
+  filter(padj < 0.05) |>
+  mutate(pathway = str_remove(pathway, "HALLMARK_")) |>
+  ggplot(aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)) +
   geom_col() +
   coord_flip() +
-  labs(x = "Pathway",
-       y = "Normalized Enrichment Score (NES)",
-       title = "Top 5 Enriched Pathways") +
-  theme_minimal()
+  scale_fill_manual(values = c("TRUE" = col_BOR[["R"]], "FALSE" = col_BOR[["NR"]]),
+                    labels = c("TRUE" = "Enriched in R", "FALSE" = "Enriched in NR"),
+                    name = NULL) +
+  labs(x = NULL, y = "Normalized Enrichment Score (NES)",
+       title = "Hallmark gene sets (padj < 0.05)") +
+  theme_minimal(base_size = 12)
 
-## b) GSEA table: select the top 10 up- and top 10 down-regulated pathways
-##    by p-value, and use plotGseaTable() to visualize them together.
-##    Save the plot to both a PDF and a PNG file.
-
-number_of_top_pathways_up <- 10
-number_of_top_pathways_down <- 10
-
-topPathwaysUp <- fgsea_res[ES > 0][head(order(pval), n = number_of_top_pathways_up), pathway]
-
-topPathwaysDown <- fgsea_res[ES < 0][head(order(pval), n = number_of_top_pathways_down), pathway]
-
-topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+p_hallmark
+ggsave("figures/RQ1_gsea_hallmark.png", p_hallmark, width = 8, height = 6, dpi = 300)
 
 
-pdf(file = "PMC_gsea_top_pathways.pdf", width = 20, height = 15)
-plotGseaTable(gene_sets[topPathways], stats = ranked_genes, fgseaRes = fgsea_res, gseaParam = 0.5)
+topPathwaysUp   <- fgsea_res[ES > 0][head(order(pval), n = 10), pathway]
+topPathwaysDown <- fgsea_res[ES < 0][head(order(pval), n = 10), pathway]
+topPathways     <- c(topPathwaysUp, rev(topPathwaysDown))
+
+pdf("figures/RQ1_gsea_table.pdf", width = 20, height = 15)
+plotGseaTable(go_bp[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
 dev.off()
 
-png("my_results_gsea_top10pathways.png", width = 20, height = 15, units = "in", res = 300)
-plotGseaTable(gene_sets[topPathways], stats = ranked_genes, fgseaRes = fgsea_res, gseaParam = 0.5)
+png("figures/RQ1_gsea_table.png", width = 20, height = 15, units = "in", res = 300)
+plotGseaTable(go_bp[topPathways], stats = ranked_genes,
+              fgseaRes = fgsea_res, gseaParam = 0.5)
 dev.off()
 
-## c) Many enriched pathways overlap heavily in their gene content.
-##    collapsePathways() reduces the results to a smaller set of more
-##    independent "main" pathways. Use it, and list the main pathways
-##    ordered by NES.
 
 ```
 
@@ -396,7 +355,7 @@ saveRDS(list(dds = dds, vsd = vsd, res = res, res_shr = res_shr,
 sessionInfo()
 ```
 
-# Differences in expression can be influenced by confounding factors such as tumour mutational burden, sample quality and tumour purity. Also, a gene that is differentially expressed is only associated with response; this does not show that the gene causes the response.
+Differences in expression can be influenced by confounding factors such as tumour mutational burden, sample quality and tumour purity. Also, a gene that is differentially expressed is only associated with response; this does not show that the gene causes the response.
 
 ## RQ2 — Immune-related signatures (Dhruva)
 
@@ -991,15 +950,12 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
 ```{r}
-library(immunedeconv)
+
 library(ggplot2)
-library(limma)
+
 library(gridExtra)
 
-data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
-counts <- data[["counts"]]
-tpm <- data[["tpm"]]
-clinical <- data[["clinical"]]
+
 ```
 
 ```{r}
@@ -1077,25 +1033,6 @@ df <- data.frame(
 stopifnot(identical(df$sample, colnames(counts)))
 ```
 
-```{r}
-TMB_plot <- plot_Response_boxplot(df, 
-                                  "TMB", 
-                                  "Tumor mutational burden", 
-                                  TMB_Response_test)
-
-PD1_plot <- plot_Response_boxplot(df, 
-                                  "PD1", 
-                                  "PDCD1 expression", 
-                                  PD1_Response_test)
-
-GEP_plot <- plot_Response_boxplot(df, 
-                                  "GEP_scores", 
-                                  "T cell–inflamed GEP score", 
-                                  GEP_Response_test)
-
-grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
-```
-
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
 
 ```{r}
@@ -1129,6 +1066,22 @@ kendall_results <- lapply(c("TMB", "PD1", "GEP_scores"), function(v) {
 })
 
 do.call(rbind, kendall_results)
+TMB_plot <- plot_Response_boxplot(df, 
+                                  "TMB", 
+                                  "Tumor mutational burden", 
+                                  TMB_Response_test)
+
+PD1_plot <- plot_Response_boxplot(df, 
+                                  "PD1", 
+                                  "PDCD1 expression", 
+                                  PD1_Response_test)
+
+GEP_plot <- plot_Response_boxplot(df, 
+                                  "GEP_scores", 
+                                  "T cell–inflamed GEP score", 
+                                  GEP_Response_test)
+
+grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 ```
 
 Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders), and it does not require the biomarker values to follow a normal distribution.
@@ -1383,27 +1336,18 @@ Missingness is non-informative (response 14.0% with TMB vs 9.5% without, *p* = 0
 
 ## RQ4 — The influence of tumor purity on immune-related biomarkers (Zoja)
 
-How might differences in tumor purity influence the expression of immune- related biomarkers and their observed associations with treatment response?
+How might differences in tumor purity influence the expression of immune-related biomarkers and their observed associations with treatment response?
 
-Suggested tasks:
-
-• Discuss how tumor purity may influence PD-1 expression and T-cell–inflamed GEP scores measured using bulk RNA-seq.
-
-• Consider whether differences in tumor purity could partly explain the associations observed in RQ2 and RQ3.
-
-• Discuss whether adjusting for tumor purity would necessarily improve the interpretation of these biomarkers.
-
-note: makesure the clinical rows follow the expression column order
-
-
+Bulk RNA-seq measures a mixture of tumour, immune and stromal cells. PDCD1 and the GEP genes are expressed mainly by immune cells, so a sample with more immune tissue (lower purity) will show higher values. We estimate purity, check whether it differs between response groups and correlates with each biomarker, and compare the biomarker–response associations with and without adjustment.
 
 ```{r}
-# Align clinicaldata and expression
+# Align clinical data and expression (join everything by sample ID)
 clin <- clinical |>
   as_tibble() |>
   filter(sample_id %in% colnames(tpm)) |>
   mutate(BOR = factor(BOR, levels = c("NR", "R")))
 
+# Base R needed here: ESTIMATE takes a genes-as-rownames matrix
 log_tpm <- log2(as.matrix(tpm[, clin$sample_id]) + 1)
 stopifnot(identical(colnames(log_tpm), clin$sample_id))
 
@@ -1411,7 +1355,7 @@ clin |> count(BOR)
 ```
 
 ```{r}
-# Biomarkers on normalised expression
+# Biomarkers on log2(TPM + 1); the GEP is the same 18-gene score as in RQ2
 GEP_genes <- c("CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
                "CXCL9", "CXCR6", "HLA-DQA1", "HLA-DRB1", "HLA-E",
                "IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1", "TIGIT")
@@ -1441,9 +1385,9 @@ markers <- clin |>
   left_join(gep,   by = "sample_id")
 ```
 
-### Estimate the tumor purity
+### Estimating tumor purity with ESTIMATE
 
-Write what estimate does
+ESTIMATE scores each sample for a 141-gene stromal signature and a 141-gene immune signature using single-sample GSEA. Their sum is the ESTIMATE score: the more non-tumour signal, the lower the inferred purity. The score is converted to purity with a cosine formula that was calibrated on Affymetrix microarrays (as in Exercise 4). On RNA-seq this is an approximation, so we treat purity as a relative ranking of samples rather than as absolute tumour-cell fractions.
 
 ```{r}
 est <- log_tpm |>
@@ -1464,24 +1408,27 @@ dat <- markers |>
 stopifnot(!anyNA(dat$purity))
 ```
 
-### does the purity differ between the response groups
+### Does purity differ between response groups?
+
 ```{r}
-# does purity differ between response group
 dat |>
   group_by(BOR) |>
   summarise(n = n(), median_purity = median(purity))
 
 wilcox.test(purity ~ BOR, data = dat) |> tidy()
 
-p_purity <- ggplot(dat, aes(BOR, purity)) +
-  geom_boxplot(outlier.shape = NA) +
+p_purity <- ggplot(dat, aes(BOR, purity, fill = BOR)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.85) +
   geom_jitter(width = 0.12, alpha = 0.5) +
+  scale_fill_manual(values = col_BOR, guide = "none") +
   labs(x = "Response", y = "ESTIMATE purity", title = "Purity by response") +
   theme_minimal()
 ```
 
+### Does purity relate to each biomarker?
 
-### does the purity relate to each biomarker (and how)
+Spearman correlations of each biomarker with purity, and separately with the immune and stromal components. These show which part of "low purity" drives each biomarker.
+
 ```{r}
 cor_tab <- expand_grid(marker    = c("PDCD1", "GEP", "TMB"),
                        covariate = c("purity", "immune", "stromal")) |>
@@ -1503,14 +1450,24 @@ p_scatter <- dat |>
   geom_point(alpha = 0.6, na.rm = TRUE) +
   geom_smooth(aes(group = 1), method = "lm", se = FALSE,
               colour = "black", na.rm = TRUE) +
+  scale_colour_manual(values = col_BOR) +
   facet_wrap(~ marker, scales = "free_y") +
-  labs(x = "ESTIMATE purity", y = NULL, colour = "Response") +
+  labs(x = "ESTIMATE purity", y = NULL, colour = "Response",
+       caption = "PDCD1: log2(TPM + 1); GEP: mean z-score; TMB: log2(mut/Mb + 1)") +
   theme_minimal()
 ```
 
-### biomarker-respose association with and without urity
+### Biomarker–response association with and without purity
 
-- odds ration,likelihood ratio
+Logistic regression, with the biomarker and covariate scaled to SD units, so the odds ratio is per 1 SD increase. For each biomarker the crude and adjusted models are fitted on the same samples (TMB has missing values), so they can be compared. The likelihood-ratio test (LRT) asks whether the biomarker adds information beyond the covariate, as Mariathasan et al. did when comparing models.
+
+Two adjustments:
+
+- **Purity**: built from immune and stromal genes, so it partly contains the immune signal we want to measure (risk of over-adjustment).
+- **Stromal score only**: removes dilution by stroma without removing the immune signal.
+
+With only 25 responders, each model has at most two predictors.
+
 ```{r}
 standardise <- \(x) (x - mean(x)) / sd(x)
 
@@ -1562,12 +1519,18 @@ p_forest <- assoc_long |>
   geom_vline(xintercept = 1, linetype = "dashed", colour = "grey50") +
   geom_pointrange(aes(xmin = conf.low, xmax = conf.high),
                   position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = c("crude" = "grey30",
+                                 "adj. purity" = starfish[3],
+                                 "adj. stromal" = starfish[6])) +
   scale_x_log10() +
   labs(x = "Odds ratio for response (per 1 SD, log scale)", y = NULL,
        colour = NULL, title = "Biomarker–response association") +
   theme_minimal()
 ```
 
+### Course-style adjustment (Exercise 4): residualise, then re-test
+
+As in Day 4, remove the part of each biomarker that is statistically associated with purity, then repeat the Wilcoxon test from RQ3 on what is left.
 
 ```{r}
 resid_tab <- c("PDCD1", "GEP", "TMB") |>
@@ -1588,27 +1551,35 @@ resid_tab <- c("PDCD1", "GEP", "TMB") |>
 resid_tab
 ```
 
+### Summary figure
+
 ```{r}
 #| fig-width: 12
 #| fig-height: 8
 grid.arrange(p_purity, p_forest, p_scatter,
              layout_matrix = rbind(c(1, 2), c(3, 3)))
+
+ggsave("figures/RQ4_purity_summary.png",
+       arrangeGrob(p_purity, p_forest, p_scatter,
+                   layout_matrix = rbind(c(1, 2), c(3, 3))),
+       width = 12, height = 8, dpi = 300)
 ```
 
-### Visuals
+### How to read the results
 
-Discussion points (claude for now\<3)
+- Purity can only confound a biomarker if it differs between responders and non-responders *and* correlates with that biomarker. The first two analyses test these two conditions separately.
+- If the odds ratio barely changes after adjustment, the association does not depend on purity.
+- If the odds ratio falls after adjusting for purity but not for the stromal score, the drop comes from removing immune signal (over-adjustment), not from correcting a confounder.
+- TMB is measured from DNA, so it is affected through a different route: low purity lowers variant allele fractions, so fewer mutations are called.
 
-\- \*\*Why purity matters in bulk RNA-seq.\*\* Each sample is a mixture of cells. Lower purity means more immune and stromal RNA, so PDCD1 and the GEP partly measure \*how much non-tumour tissue was sampled\*, not only how inflamed the tumour is.
+### Discussion
 
-- \*\*Could purity explain the RQ2/RQ3 results?\*\* Only if purity differs between response groups \*and\* correlates with the marker. Section 1 and section 2 test those two conditions separately. A marker whose OR barely changes after adjustment is robust to purity.
-
-\- \*\*TMB.\*\* TMB comes from DNA sequencing, not from RNA. Low purity lowers variant allele fractions, so it can make the measured TMB lower than the real one. TMB is affected through a different mechanism than the RNA markers.
-
-\- \*\*Adjusting is not automatically better.\*\*
-
-- ESTIMATE purity is computed partly \*from immune genes\*, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response. This is over-adjustment. - Infiltration is part of the causal path: an inflamed tumour \*is\* a lower-purity tumour.
-
-- Stroma also matters (Mariathasan: TGFβ-rich, T-cell-excluding stroma predicts non-response), so low purity can mean "inflamed" or "excluded". - ESTIMATE purity on RNA-seq is an approximation without a reference such as pathologist estimates or ABSOLUTE.
-
-\- \*\*Better alternatives\*\* include deconvolution of cell fractions (e.g. CIBERSORTx, quanTIseq) and spatial phenotyping (inflamed / excluded / desert, as in the paper).
+- **Why purity matters in bulk RNA-seq.** Each sample is a mixture of cells. Lower purity means more immune and stromal RNA, so PDCD1 and the GEP partly measure how much non-tumour tissue was sampled, not only how inflamed the tumour is.
+- **Could purity explain the RQ2/RQ3 results?** Only if purity differs between response groups and correlates with the marker. A marker whose odds ratio barely changes after adjustment is robust to purity.
+- **TMB.** TMB comes from DNA sequencing, not RNA. Low purity lowers variant allele fractions and can make the measured TMB lower than the true value, so TMB is affected through a different mechanism than the RNA markers.
+- **Adjusting is not automatically better.**
+  - ESTIMATE purity is computed partly from immune genes, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response (over-adjustment).
+  - Infiltration lies on the causal path to response: an inflamed tumour *is* a lower-purity tumour.
+  - Stroma also matters. In Mariathasan et al., TGF-β-rich stroma that excludes T cells predicts non-response, so low purity can mean "inflamed" or "excluded". Splitting ESTIMATE into immune and stromal scores separates the two.
+  - ESTIMATE purity on RNA-seq is an approximation, with no pathology or DNA-based estimate (e.g. ABSOLUTE) to validate it.
+- **Better alternatives** include cell-type deconvolution (e.g. quanTIseq, CIBERSORTx) and spatial immune phenotypes (inflamed / excluded / desert), as in the paper.
