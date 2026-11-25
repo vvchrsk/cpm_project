@@ -210,6 +210,9 @@ table(res_df$direction)
 res_df |> filter(direction != "Not significant") |> arrange(padj) |>
   write_csv("RQ1_DE_genes_significant.csv")
 ```
+#The volcano plot shows a modest set of differentially expressed genes. The strongest genes reach an adjusted p-value of about 10^-8. More genes are higher in non-responders (left) than in responders (right).
+
+The responder side includes immune-related genes such as CCL5, a chemokine that recruits T cells, and ZNF683, a marker of tissue-resident cytotoxic T cells. This fits the idea that responders have a more inflamed, T-cell-rich tumour. The non-responder side is dominated by epithelial and tumour-type genes (MUC6, PAX8, MMP7, TCN1, CP, C9, SERPINA5). MMP7 also points to tissue remodelling, which is consistent with a tumour environment that is less immune-active. The shrunken fold changes are mostly between 1 and 4, so the effects are moderate. With only 25 responders, power is limited and the list should be seen as suggestive. The plot only shows association, not whether these genes cause the response.
 
 Gene set enrichment analysis shows which pathways are higher in responders or non-responders, telling what the differentially expressed genes do, which then relates to how the immune system responds to immunotherapy.
 
