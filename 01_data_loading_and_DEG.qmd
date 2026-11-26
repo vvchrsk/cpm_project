@@ -964,18 +964,11 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 -   Our score is an unweighted mean of z-scored `log2(TPM + 1)`, while the published GEP is a weighted mean of housekeeping-normalised NanoString data. The two are comparable within this cohort but not on the same scale.
 -   `PDCD1` is one of the 18 genes in the exercise's list, so comparing it against the full score would be circular. RQ3 rebuilds the score from the other 17 genes; even then the two correlate at ρ = 0.90, so they largely measure one axis.
 
-## RQ3 — Biomarker comparison (Giosuè)
+## RQ3 — Biomarker comparison (Giosuè s253716)
 
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
-```{r}
 
-library(ggplot2)
-
-library(gridExtra)
-
-
-```
 
 ```{r}
 all(clinical$pat_id %in% colnames(counts))
