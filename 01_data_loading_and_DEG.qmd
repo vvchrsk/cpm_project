@@ -1105,7 +1105,7 @@ GEP_plot <- plot_Response_boxplot(df,
 grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 ```
 
-Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders), and it does not require the biomarker values to follow a normal distribution.
+Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders, or 21 and 129 for TMB, where 42 patients have no measurement), and it does not require the biomarker values to follow a normal distribution.
 
 All three biomarkers showed statistically significant differences between response groups (p \< 0.001), with higher median values in responders. TMB increased from 7 in non-responders to 14 in responders, PDCD1 expression from 0.55 to 1.2, and the GEP score from -0.15 to 0.55.
 
