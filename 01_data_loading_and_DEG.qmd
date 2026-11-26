@@ -17,8 +17,8 @@ library(pheatmap)
 library(gridExtra)
 library(PNWColors) 
 library(ggplot2)
-library(immunedeconv)
-library(limma)
+# library(immunedeconv)
+# library(limma)
 library(broom)
 ```
 
@@ -954,7 +954,7 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 
 -   The score cannot see where the T cells are. Mariathasan et al. showed TGF-β-rich stroma confines T cells to the tumour periphery, and bulk RNA-seq cannot separate an infiltrated tumour from an excluded one. Both score high; only one responds.
 -   PD-L1 is one brake among several. Resistance also runs through TGF-β, other checkpoints, Tregs and myeloid suppression, loss of antigen presentation (B2M, JAK/STAT), or WNT/β-catenin exclusion.
--   An inflamed tumour still needs something to recognise. Independence from TMB means a high-GEP tumour can carry few neoantigens.P
+-   An inflamed tumour still needs something to recognise. Independence from TMB means a high-GEP tumour can carry few neoantigens.
 -   The score is cohort-relative. Z-scoring within these 192 patients gives a ranking within the cohort, so published cut-offs do not apply.
 -   The genes are not tumour-specific. Expression is diluted by how much immune and stromal tissue the biopsy contained, which is the purity problem taken up in RQ4.
 -   The endpoint is the easiest contrast: complete response against progressive disease, 25 responders, intermediates excluded. Discrimination across the full spectrum would be weaker.
@@ -1123,6 +1123,8 @@ How do PD-1 (`PDCD1`) expression, immune-related gene signatures, and tumor muta
 
 All three on a consistent basis: `log2(TPM + 1)`, RQ2's gene list, and the same patients throughout. Because `PDCD1` is one of those genes, the score is rebuilt here without it.
 
+The previous section tests each biomarker on every patient who has that measurement, which is the right choice for establishing the individual associations. Ranking them against each other needs one cohort, so the comparisons below use the 150 patients with all three values. This costs little precision: the GEP reaches AUC 0.731 (95% CI 0.619 to 0.833) on all 192 patients and 0.756 (0.643 to 0.855) on the matched 150. The interval width is set by the 25 responders rather than the 167 non-responders, and 38 of the 42 patients without TMB are non-responders.
+
 ```{r}
 #| label: rq3d-setup
 
@@ -1179,31 +1181,6 @@ cat("\ncomplete cases:", nrow(cmp), "| responders:", sum(y3), "\n")
 
 *Patients without TMB do not differ in response rate or GEP score, so dropping them is unlikely to bias the comparison.*
 
-### Distribution of each biomarker by response
-
-```{r}
-#| label: rq3d-boxplots
-#| fig-width: 9
-#| fig-height: 3.6
-
-bm_long <- cmp |>
-  tidyr::pivot_longer(c(PDCD1, GEP, TMB), names_to = "biomarker", values_to = "value") |>
-  dplyr::mutate(biomarker = factor(biomarker, levels = c("PDCD1", "GEP", "TMB")))
-
-p_rq3d_box <- ggplot(bm_long, aes(BOR, value, fill = BOR)) +
-  geom_boxplot(outlier.shape = NA, width = 0.55, linewidth = 0.35, alpha = 0.85) +
-  geom_jitter(width = 0.12, alpha = 0.45, size = 1) +
-  facet_wrap(~ biomarker, scales = "free_y") +
-  scale_fill_manual(values = col_BOR, guide = "none") +
-  labs(title = "Biomarker distributions by response (n = 150)",
-       x = "Response class", y = NULL) +
-  theme_minimal(base_size = 12) + theme(panel.grid.minor = element_blank())
-
-p_rq3d_box
-ggsave("figures/RQ3D_biomarker_boxplots.png", p_rq3d_box,
-       width = 9, height = 3.6, dpi = 300)
-```
-
 ### Which biomarker discriminates best?
 
 Wilcoxon per biomarker, then AUC with a bootstrap interval, which puts all three on one scale regardless of their units.
@@ -1223,8 +1200,6 @@ boot_auc3 <- function(score, reps = 2000) {
 auc_tab <- do.call(rbind, lapply(c("PDCD1", "GEP", "TMB"), function(v) {
   b <- boot_auc3(cmp[[v]])
   data.frame(biomarker = v,
-             median_NR = round(median(cmp[[v]][!y3]), 2),
-             median_R  = round(median(cmp[[v]][ y3]), 2),
              wilcox_p  = signif(wilcox.test(cmp[[v]] ~ cmp$BOR)$p.value, 3),
              AUC       = round(auc_mw(cmp[[v]], y3), 3),
              ci_lo     = round(quantile(b, 0.025), 3),
