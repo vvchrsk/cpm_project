@@ -1,7 +1,9 @@
 ---
 title: "Gene-expression biomarkers of immunotherapy response"
 author: "Vera Vecherskaia, Dhruva Sakhare, Zoja Palová, Giosuè Palliotto, Thota Kanishka Rao"
-format: html
+format:
+  html:
+    embed-resources: true
 ---
 
 ```{r}
