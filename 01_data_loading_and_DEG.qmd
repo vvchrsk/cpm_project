@@ -972,11 +972,6 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 -   The genes are not tumour-specific. Expression is diluted by how much immune and stromal tissue the biopsy contained, which is the purity problem taken up in RQ4.
 -   The endpoint is the easiest contrast: complete response against progressive disease, 25 responders, intermediates excluded. Discrimination across the full spectrum would be weaker.
 
-### Methodological caveats
-
--   Our score is an unweighted mean of z-scored `log2(TPM + 1)`, while the published GEP is a weighted mean of housekeeping-normalised NanoString data. The two are comparable within this cohort but not on the same scale.
--   `PDCD1` is one of the 18 genes in the exercise's list, so comparing it against the full score would be circular. RQ3 rebuilds the score from the other 17 genes; even then the two correlate at ρ = 0.90, so they largely measure one axis.
-
 ## RQ3 — Biomarker comparison
 
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? 
@@ -1147,9 +1142,9 @@ clin3$BOR <- factor(clin3$BOR, levels = c("NR", "R"))
 lt3 <- log2(as.matrix(tpm) + 1)
 stopifnot(identical(df_rq2$sample, colnames(tpm)))   # GEP score from RQ2
 
-# PDCD1 is one of the 18 genes in the exercise's list, so comparing it against
-# the full score would be partly circular: the gene would appear on both sides.
-# The score used here is rebuilt without PDCD1, leaving the other 17 genes.
+# PDCD1 is one of the 18 genes in the exercise's list, so the score used here is
+# rebuilt from the other 17 to keep it off both sides of the comparison. The
+# correlation below shows how little this changes.
 gep17_genes <- setdiff(intersect(gep_genes, rownames(lt3)), "PDCD1")
 stopifnot(length(gep17_genes) == 17)
 gep17 <- colMeans(t(scale(t(lt3[gep17_genes, , drop = FALSE]))), na.rm = TRUE)
