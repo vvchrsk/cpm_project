@@ -971,13 +971,13 @@ How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutati
 
 
 ```{r}
-all(clinical$pat_id %in% colnames(counts))
+all(clinical$pat_id %in% colnames(tpm))
 
 # Reorder expression columns to match the phenotype table.
-counts <- counts[, match(clinical$pat_id, colnames(counts)), drop = FALSE]
+tpm_counts <- tpm[, match(clinical$pat_id, colnames(tpm)), drop = FALSE]
 
 # Explicitly verify the resulting sample order.
-stopifnot(identical(clinical$pat_id, colnames(counts)))
+stopifnot(identical(clinical$pat_id, colnames(tpm_counts)))
 
 print(table(clinical$BOR, useNA = "ifany"))
 
@@ -985,8 +985,8 @@ print(table(clinical$BOR, useNA = "ifany"))
 TMB <- clinical$TMB
 
 # Extract PDCD1 expression.
-"PDCD1" %in% rownames(counts)
-PD1 <- as.numeric(counts["PDCD1", ])
+"PDCD1" %in% rownames(tpm_counts)
+PD1 <- as.numeric(log2(tpm_counts["PDCD1", ] + 1))
 
 GEP_genes <- c(
   "CD27", "CD274", "PDCD1", "CD276", "CD8A", "CMKLR1",
@@ -994,14 +994,17 @@ GEP_genes <- c(
   "IDO1", "LAG3", "NKG7", "PDCD1LG2", "PSMB10", "STAT1", "TIGIT"
 )
 
-GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(counts)]
-GEP_genes_missing <- setdiff(GEP_genes, rownames(counts))
+GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(tpm_counts)]
+GEP_genes_missing <- setdiff(GEP_genes, rownames(tpm_counts))
 
 cat("GEP genes present:", length(GEP_genes_present), "of", length(GEP_genes), "\n")
 # All 18 present
 
-# Extract GEP genes.
-GEP_counts <- counts[GEP_genes_present, , drop = FALSE]
+# Exclude PDCD1 to avoid comparing it against a signature containing itself.
+GEP_genes_present <- setdiff(GEP_genes_present, "PDCD1")
+
+# Extract normalized GEP expression.
+GEP_counts <- log2(tpm_counts[GEP_genes_present, , drop = FALSE] + 1)
 
 # Standardize each gene across samples.
 # scale() operates on columns, so transpose before and after scaling.
@@ -1042,7 +1045,9 @@ df <- data.frame(
   GEP_scores = GEP_scores,
   Response = factor(clinical$BOR))
 
-stopifnot(identical(df$sample, colnames(counts)))
+stopifnot(identical(df$sample, colnames(tpm_counts)))
+
+df <- df[complete.cases(df), ] # keep only complete records
 ```
 
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
