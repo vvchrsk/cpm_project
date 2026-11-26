@@ -1492,7 +1492,7 @@ p_scatter <- dat |>
 p_scatter
 ```
 
-*PDCD1 and GED fall as purity rises and correlates most strongly with immune score rather than stromal score. TMB with p = 1.45e-01 is barely related to purity. The slight increasing trend seen in the plot is a measurement effect as DNA mutations are harder to detect with lower purity.*
+*PDCD1 and GEP fall as purity rises and correlates most strongly with immune score rather than stromal score. TMB with p = 1.45e-01 is barely related to purity. The slight increasing trend seen in the plot is a measurement effect as DNA mutations are harder to detect with lower purity.*
 
 ### Biomarker–response association with and without purity
 
