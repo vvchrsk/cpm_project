@@ -24,7 +24,14 @@ library(ggplot2)
 # library(limma)
 library(broom)
 
-options(bitmapType = "cairo")
+# The server needs cairo for PNG output. On macOS capabilities("cairo") can
+# report TRUE while the library fails to load (it needs XQuartz), which breaks
+# every plot, so only set it when cairo really works.
+local({
+  v <- suppressWarnings(tryCatch(grDevices::cairoVersion(),
+                                 error = function(e) NA_character_))
+  if (capabilities("cairo") && !is.na(v) && nzchar(v)) options(bitmapType = "cairo")
+})
 
 ```
 
@@ -1123,11 +1130,11 @@ Despite statistical significance, the correlation coefficients indicate that all
 
 Overall, the three biomarkers capture complementary aspects of tumor immunology: TMB reflects the potential for tumor antigen generation, PDCD1 reflects immune checkpoint activity, and GEP reflects the overall immune activity of the tumor microenvironment. Although TMB ranks the highest with treatment response in our analysis, all three associations were weak. Combining these biomarkers could therefore provide a more comprehensive characterization of tumor immunogenicity and immune activity than relying on any single biomarker.
 
-## RQ3 — Biomarker comparison - 
+## RQ3 — Biomarker comparison: discrimination and combination
 
-All three on a consistent basis: `log2(TPM + 1)`, RQ2's gene list, and the same patients throughout. Because `PDCD1` is one of those genes, the score is rebuilt here without it.
+The previous section establishes that all three biomarkers are associated with response. This section asks which of them discriminates best, whether they carry independent information, and whether combining them helps.
 
-The previous section tests each biomarker on every patient who has that measurement, which is the right choice for establishing the individual associations. Ranking them against each other needs one cohort, so the comparisons below use the 150 patients with all three values. This costs little precision: the GEP reaches AUC 0.731 (95% CI 0.619 to 0.833) on all 192 patients and 0.756 (0.643 to 0.855) on the matched 150. The interval width is set by the 25 responders rather than the 167 non-responders, and 38 of the 42 patients without TMB are non-responders.
+All three on a consistent basis: `log2(TPM + 1)` and RQ2's gene list. Because `PDCD1` is one of those genes, the score is rebuilt here without it. Each biomarker there is tested on every patient who has it measured; ranking them against each other needs one cohort, so the comparisons below use the 150 patients with all three values. That costs little: the GEP's AUC is 0.731 (0.619–0.833) on all 192 and 0.756 (0.643–0.855) on the matched 150, because precision is set by the 25 responders and only 4 of them lack TMB.
 
 ```{r}
 #| label: rq3d-setup
