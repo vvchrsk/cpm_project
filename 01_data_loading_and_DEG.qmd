@@ -1,10 +1,13 @@
 ---
-title: "01_data_loading"
+title: "Gene-expression biomarkers of immunotherapy response"
 author: "Vera Vecherskaia, Dhruva Sakhare, Zoja Palová, Giosuè Palliotto, Thota Kanishka Rao"
 format: html
 ---
 
 ```{r}
+#| message: false
+#| warning: false
+
 library(DESeq2)
 library(tidyverse)
 library(tidyestimate)
@@ -20,9 +23,12 @@ library(ggplot2)
 # library(immunedeconv)
 # library(limma)
 library(broom)
+
+options(bitmapType = "cairo")
+
 ```
 
-## Q1
+## RQ1 - Differential expression
 
 Loading the IMvigor210 data and preparing it for analysis by removing the genes without a valid name, checking that the clinical table matches the expression columns, filtering out genes with very low counts, and normalizing the data with a variance-stabilizing transformation so that samples can be compared fairly.
 
@@ -282,7 +288,7 @@ ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
 
-# here because this horrible server does not accept
+# use when on server
 get_msig <- function(coll) {
   if ("collection" %in% names(formals(msigdbr))) {
     msigdbr(species = "Homo sapiens", collection = coll)
@@ -300,7 +306,7 @@ go_bp  <- go_bp[go_sub %in% c("GO:BP", "BP"), ]          # GO Biological Process
 stopifnot(nrow(go_bp) > 0)
 go_bp <- split(go_bp$gene_symbol, go_bp$gs_name)
 
-# works locally i think
+# use when working locally
 #hallmark <- msigdbr(species = "Homo sapiens", collection = "H")
 #hallmark <- split(hallmark$gene_symbol, hallmark$gs_name)
 
@@ -371,12 +377,12 @@ saveRDS(list(dds = dds, vsd = vsd, res = res, res_shr = res_shr,
              fgsea_hallmark = fgsea_hallmark),
         "RQ1_objects.rds")
 
-sessionInfo()
+
 ```
 
 Differences in expression can be influenced by confounding factors such as tumour mutational burden, sample quality and tumour purity. Also, a gene that is differentially expressed is only associated with response; this does not show that the gene causes the response.
 
-## RQ2 — Immune-related signatures (Dhruva)
+## RQ2 — Immune-related signatures
 
 Is the 18-gene T-cell–inflamed GEP (Ayers et al. 2017, [10.1172/JCI91190](https://doi.org/10.1172/JCI91190)) associated with response to anti-PD-L1 treatment?
 
@@ -453,7 +459,7 @@ gene_summary
 
 *All 18 genes are present, but `HLA-DQA1` is detected in only a third of samples and will carry little information.*
 
-Per-gene association with response, BH-corrected within the 18 genes only. Q1's genome-wide DESeq2 is the stricter test, printed alongside for contrast.
+Per-gene association with response, BH-corrected within the 18 genes only. RQ1's genome-wide DESeq2 is the stricter test, printed alongside for contrast.
 
 ```{r}
 #| label: rq2-per-gene
@@ -474,7 +480,7 @@ print(per_gene, row.names = FALSE, digits = 3)
 cat("\nSignificant within the signature (BH, 18 tests):",
     sum(per_gene$padj < 0.05), "of", nrow(per_gene), "\n")
 
-# The same genes under Q1's genome-wide DESeq2 model, for contrast.
+# The same genes under RQ1's genome-wide DESeq2 model, for contrast.
 if (exists("res")) {
   deseq_18 <- as.data.frame(res[rownames(gep_mat), c("log2FoldChange", "padj")])
   cat("Significant genome-wide (DESeq2, Q1):",
@@ -938,7 +944,7 @@ All 18 genes are present. The score is clearly associated with response: median 
 
 Ayers et al. report AUC 0.75 for their weighted score. Ours is consistent with that, though within a wide interval, against a different endpoint (theirs includes partial responses), and without their fitted weights. At most this shows the signature carries real signal in a setting it was not developed for, which is a weaker claim than reproducing their result.
 
-The signature behaves as a unit: mean pairwise ρ = 0.55, and 15 of 18 genes are individually significant (BH within the 18; Q1's genome-wide DESeq2 is stricter). Strongest are `CXCL9` (0.771), `NKG7` (0.761), `STAT1` (0.760), `LAG3` (0.747). Three contribute nothing: `HLA-DQA1` (detected in 33% of samples), `CD276` (AUC 0.445, the one gene Ayers report as not positively associated with response) and `HLA-DRB1`. Dropping or flipping them moves the AUC only to 0.737, so the average is forgiving of bad members.
+The signature behaves as a unit: mean pairwise ρ = 0.55, and 15 of 18 genes are individually significant (BH within the 18; RQ1's genome-wide DESeq2 is stricter). Strongest are `CXCL9` (0.771), `NKG7` (0.761), `STAT1` (0.760), `LAG3` (0.747). Three contribute nothing: `HLA-DQA1` (detected in 33% of samples), `CD276` (AUC 0.445, the one gene Ayers report as not positively associated with response) and `HLA-DRB1`. Dropping or flipping them moves the AUC only to 0.737, so the average is forgiving of bad members.
 
 We test the composite directly. `CXCL9` alone scores higher (0.771 vs 0.733), but the difference is not significant (−0.039, CI −0.081 to +0.006) and `CXCL9` is a post-hoc winner from 18. Against 1000 random 18-gene sets (median AUC 0.567), none reached the GEP's AUC.
 
@@ -964,9 +970,9 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 -   Our score is an unweighted mean of z-scored `log2(TPM + 1)`, while the published GEP is a weighted mean of housekeeping-normalised NanoString data. The two are comparable within this cohort but not on the same scale.
 -   `PDCD1` is one of the 18 genes in the exercise's list, so comparing it against the full score would be circular. RQ3 rebuilds the score from the other 17 genes; even then the two correlate at ρ = 0.90, so they largely measure one axis.
 
-## RQ3 — Biomarker comparison (Giosuè s253716)
+## RQ3 — Biomarker comparison
 
-How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
+How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? 
 
 ```{r}
 all(clinical$pat_id %in% colnames(tpm))
@@ -1012,9 +1018,9 @@ GEP_counts_scaled <- t(scale(t(GEP_counts)))
 GEP_scores <- colMeans(GEP_counts_scaled, na.rm = TRUE)
 ```
 
-• Visualize the distribution of each biomarker in responders and non-responders using boxplots.
+Visualize the distribution of each biomarker in responders and non-responders using boxplots.
 
-• Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
+Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
 
 ```{r}
 plot_Response_boxplot <- function(data, variable, y_label, test_result) {
@@ -1046,7 +1052,7 @@ df <- data.frame(
 stopifnot(identical(df$sample, colnames(tpm_counts)))
 ```
 
-• Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
+Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
 
 ```{r}
 TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
@@ -1115,11 +1121,9 @@ Despite statistical significance, the correlation coefficients indicate that all
 
 **T-cell-inflamed Gene Expression Profile (GEP)** summarizes the expression of 18 immune-related genes involved in T-cell infiltration, cytotoxic activity, antigen presentation and interferon signalling. It therefore provides a broader representation of the immune state of the tumor microenvironment. Its main strength is that it captures multiple aspects of anti-tumor immunity rather than relying on a single gene. However, bulk gene expression cannot distinguish between different cell populations, and averaging standardized expression values may conceal differences between individual immune pathways.
 
-Overall, the three biomarkers capture complementary aspects of tumor immunology: TMB reflects the potential for tumor antigen generation, PDCD1 reflects immune checkpoint activity, and GEP reflects the overall immune activity of the tumor microenvironment. Although TMB showed the strongest association with treatment response in our analysis, all three associations were relatively weak. Combining these biomarkers could therefore provide a more comprehensive characterization of tumor immunogenicity and immune activity than relying on any single biomarker.
+Overall, the three biomarkers capture complementary aspects of tumor immunology: TMB reflects the potential for tumor antigen generation, PDCD1 reflects immune checkpoint activity, and GEP reflects the overall immune activity of the tumor microenvironment. Although TMB ranks the highest with treatment response in our analysis, all three associations were weak. Combining these biomarkers could therefore provide a more comprehensive characterization of tumor immunogenicity and immune activity than relying on any single biomarker.
 
-## RQ3 — Biomarker comparison (Dhruva)
-
-How do PD-1 (`PDCD1`) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses?
+## RQ3 — Biomarker comparison - 
 
 All three on a consistent basis: `log2(TPM + 1)`, RQ2's gene list, and the same patients throughout. Because `PDCD1` is one of those genes, the score is rebuilt here without it.
 
@@ -1275,7 +1279,7 @@ round(cor(cmp[, c("PDCD1", "GEP", "TMB")], method = "spearman"), 3)
 
 ### Do they combine?
 
-TMB is log-transformed as in Q1, and all predictors are in SD units so the coefficients are comparable.
+TMB is log-transformed as in RQ1, and all predictors are in SD units so the coefficients are comparable.
 
 ```{r}
 #| label: rq3d-combinations
@@ -1371,15 +1375,15 @@ Each has a different weakness. TMB captures antigenic potential but says nothing
 
 Missingness is non-informative (response 14.0% with TMB vs 9.5% without, *p* = 0.61; GEP does not differ by availability, *p* = 0.47), but 42 patients are still excluded. AUCs are in-sample, and the endpoint remains complete response against progressive disease.
 
-## RQ4 — The influence of tumor purity on immune-related biomarkers (Zoja)
+## RQ4 —  The influence of tumor purity on immune-related biomarker
 
 How might differences in tumor purity influence the expression of immune-related biomarkers and their observed associations with treatment response?
 
-Bulk RNA-seq measures a mixture of tumour, immune and stromal cells. Low purity sample contains more immune tissue, therefore will show higher values of PDCD1 and GEP genes which are expressed mainly by immune cells.
+Bulk RNA-seq measures a mixture of tumour, immune and stromal cells. Low purity sample contains more non-tumour cells (immune cells), therefore will show higher values of PDCD1 and GEP genes which are genes expressed by T cells. Purity could thus mask or inflate the associations found in previous questions.
 
 Purity estimation approach:
-- run ESTIMATE
-- check if it differs etween NR and R and correlate between biomarkers
+- estimate purity with ESTIMATE
+- check if it differs between NR and R and correlate with each of the biomarkers
 - compare the biomarker-response association with and without adjustment
 
 
@@ -1453,7 +1457,7 @@ p_purity <- ggplot(dat, aes(BOR, purity, fill = BOR)) +
   labs(x = "Response", y = "ESTIMATE purity", title = "Purity by response") +
   theme_minimal()
 ```
-Both respond groups contain approximately the same ammount of non-tumour tissue, 0.65 for NR and 0.62 for R. (Wilcoxon p = 0.17)
+Both respond groups contain approximately the same ammount of non-tumour tissue, median 0.65 for NR and 0.62 for R. (Wilcoxon p = 0.17)
 
 ### Does purity relate to each biomarker?
 
@@ -1489,7 +1493,7 @@ p_scatter <- dat |>
 p_scatter
 ```
 
-*PDCD1 and GED fall as purity rises and correlates most strongly with immune score rather than stromal score. TMB with p = 1.45e-01 is barely related to purity. The increasing trend seen in the plot is a measurement effect as mutations are harder to detect with lower purity.*
+*PDCD1 and GED fall as purity rises and correlates most strongly with immune score rather than stromal score. TMB with p = 1.45e-01 is barely related to purity. The slight increasing trend seen in the plot is a measurement effect as DNA mutations are harder to detect with lower purity.*
 
 ### Biomarker–response association with and without purity
 
@@ -1562,11 +1566,11 @@ p_forest <- assoc_long |>
   theme_minimal()
 p_forest
 ```
-*Adjusting for purity changes the odds ratio of PDCD1 to 43% and GEP by 74%, while adjusting for stromal changes had a smaller effect 9% and 21%. Low-purity samples carry both immune cell in favour of response, and stroma which is linked to non-response,so the crude associations partly cancel these out. TMB is almost unchanged (2-3%). All biomarkers remained informative beyond purity (LRT p ≤ 6 × 10⁻⁴)*
+*Adjusting for purity increases the log-OR of PDCD1 to 43% and GEP by 74%, while adjusting for stromal changes had a smaller increase effect 9% and 21%. All biomarkers remained informative beyond purity (LRT p ≤ 6 × 10⁻⁴). Low-purity samples carry both immune cell in favour of response, and stroma which is linked to non-response,so the crude associations partly cancel these out. TMB is almost unchanged (2-3%).*
 
-### Course-style adjustment (Exercise 4): residualise, then re-test
+### Residualise and re-test
 
-As in Day 4, remove the part of each biomarker that is statistically associated with purity, then repeat the Wilcoxon test from RQ3 on what is left.
+We remove the part of each biomarker that is statistically associated with purity, then repeat the Wilcoxon test from RQ3 on what is left.
 
 ```{r}
 resid_tab <- c("PDCD1", "GEP", "TMB") |>
@@ -1586,7 +1590,7 @@ resid_tab <- c("PDCD1", "GEP", "TMB") |>
 
 resid_tab
 ```
-*After removing the part explained by purity, all three differ between response groups. This agrees with the regression results and Q2, purity does not explain the associations, for GEP the signal is clearer. *
+*After removing the part explained by purity, all three differ between response groups. This agrees with the regression results and RQ2/3, purity does not explain the associations, for GEP the signal is clearer.*
 
 ### Summary figure
 
@@ -1601,21 +1605,27 @@ ggsave("figures/RQ4_purity_summary.png",
                    layout_matrix = rbind(c(1, 2), c(3, 3))),
        width = 12, height = 8, dpi = 300)
 ```
-**Summary of RQ4: top left - purity by response, top right -crude and purity- or stroma-adjusted odds ratios per SD, bottom -each biomarker against purity, coloured by response. Adjustment strengthens the immune biomarkers rather than weakening them, while TMB is unaffected.*
+*Summary of RQ4: top left - purity by response, top right -crude and purity- or stroma-adjusted odds ratios per SD, bottom -each biomarker against purity, coloured by response. Adjustment does not weaken the immune biomarkers, while TMB is unaffected.*
 
 ### Discussion
 
-- **Why purity matters in bulk RNA-seq.** 
-Lower purity means more immune and stromal RNA, so PDCD1 and the GEP have higher values and partly measure how much non-tumour tissue was sampled, not only how inflamed the tumour is.
+##### Why purity matters in bulk RNA-seq?
 
-- **Could purity explain the RQ2/RQ3 results?** 
-Not really, all three biomarkers stayed associated with response after adjustment with logistic regression and residual approach. In the crude analysis stroma associated with non response nad immune cells associated with response partly cancel out so the immune signal is underestimated.
+Lower purity means more non-tumour RNA in a sample. Since PDC1 and most of the GEP genes come from immune cells, a sample with lots of them will score high, while a sample with a lot of stroma gets diluted. So biomarkers tells us partially how much non-tumour tissue was sampled an not how inflamed the tumor is
 
-- **TMB** TMB comes from DNA sequencing, not RNA, so tissue composition barerly changes its association with response, in low purity TMB may be harder to detect so the measured values may be underestimated.
+##### Could purity explain the RQ2/RQ3 results?
 
-- **Adjusting is not automatically better.**
-  - ESTIMATE purity is computed partly from immune genes, so adjusting the GEP for it is circular and can remove exactly the T-cell signal that predicts response 
-  - TGF-β-rich stroma excludes T cells predicts non-response, so low purity can mean inflamed or excluded. Adjusted and crude estimates should be reported together rather than one replacing the other.
-  - ESTIMATE purity on RNA-seq is an approximation, with no pathology or DNA-based estimate (e.g. ABSOLUTE) to validate it. With 25 responders the adjusted odds ratios are imprecise. 
+Not really, all three biomarkers stayed associated with response after adjustment for purity, both with logistic regression and residual approach. For PDCD1 and the GEP the association actually got stronger. In the crude analysis stroma associated with non response nad immune cells associated with response partly cancel out so the immune signal may be underestimated. In Mariathasan et al., TGF-β-rich stroma keeps T cells away from the tumour, so low purity can mean either an inflamed or an excluded tumour.
+
+
+##### TMB 
+
+TMB comes from DNA sequencing, not RNA, so tissue composition barerly changes its association with response, in low purity TMB may be harder to detect so the measured values may be underestimated.
+
+###### Would adjusting for purity improve the biomarker interpretation?
+
+Not necessarily. In our data the adjustment improved the interpretation of GEP and PDC1 and their association with response, adjusting for stroma pointed the same way. However ESTIMATE purity is computed partly from immune genes, so adjusting the GEP for it is circular and can remove exactly the real T-cell signal. ESTIMATE purity on RNA-seq is an approximation, with no pathology or DNA-based estimate to validate it. With 25 responders the adjusted odds ratios are imprecise, so crude and adjusted results should be reported together.
   
-- **Alternatives** include cell-type deconvolution (e.g. quanTIseq, CIBERSORTx) and spatial immune phenotypes (inflamed / excluded / desert), as in the paper, would separate the immune and stromal effects more directly.
+##### What could be done better?
+
+Oher analysis alternatives include cell-type deconvolution (e.g. quanTIseq, CIBERSORTx) and spatial immune phenotypes (inflamed, excluded, desert), as in the paper, would let us separate the immune and stromal effects more directly than a single purity number.
