@@ -593,7 +593,7 @@ p_rq2_dist
 ggsave("figures/RQ2_score_distribution.png", p_rq2_dist, width = 7, height = 4, dpi = 300)
 ```
 
-### Are higher GEP scores associated with response?
+### Association between GEP score and response
 
 Wilcoxon rank-sum first: non-parametric, so it suits the unequal groups (25 vs 167) and assumes no normality.
 
@@ -654,7 +654,7 @@ data.frame(
 
 *Each standard deviation of score corresponds to 2.3-fold higher odds of complete response.*
 
-AUC is the probability that a random responder outranks a random non-responder, where 0.5 is a coin flip.
+AUC is the probability that a random responder outranks a random non-responder, where 0.5 is random ranking.
 
 ```{r}
 #| label: rq2-auc
@@ -677,7 +677,7 @@ cat("AUC:", round(auc_gep, 3),
     " 95% CI:", paste(round(auc_ci, 3), collapse = " - "), "\n")
 ```
 
-*AUC 0.733, so discrimination is moderate: clearly better than chance, far from deterministic.*
+*AUC 0.733, so discrimination is moderate: clearly better than chance, but one pair in four is still ranked the wrong way round.*
 
 ```{r}
 #| label: rq2-roc
@@ -817,7 +817,7 @@ pheatmap(
 )
 ```
 
-### How much does the score depend on its weakest members?
+### Dependence on the weakest genes
 
 Two genes look like dead weight: `HLA-DQA1` is undetected in two thirds of samples, and `CD276` points the opposite way to the rest, which Ayers et al. also report. Our unweighted mean keeps the first and adds the second positively; does either cost anything?
 
@@ -851,7 +851,7 @@ do.call(rbind, lapply(names(variants), function(nm) {
 
 *No variant moves the AUC by more than 0.005, so the score tolerates its weakest members.*
 
-### Is the composite score doing any work?
+### Value of the composite over its parts
 
 `CXCL9` alone scores higher than the 18-gene average, so two things need checking: whether that gap exceeds sampling noise, and whether the signature's particular genes matter or any 18 expressed genes would score as well.
 
@@ -1160,7 +1160,7 @@ bm <- data.frame(
 summary(bm)
 ```
 
-### Missing TMB: is complete-case analysis safe?
+### Missing TMB and complete-case analysis
 
 TMB is missing for 42 patients, so check they do not differ systematically before dropping them.
 
@@ -1186,7 +1186,7 @@ cat("\ncomplete cases:", nrow(cmp), "| responders:", sum(y3), "\n")
 
 *Patients without TMB do not differ in response rate or GEP score, so dropping them is unlikely to bias the comparison.*
 
-### Which biomarker discriminates best?
+### Discrimination of each biomarker
 
 Wilcoxon per biomarker, then AUC with a bootstrap interval, which puts all three on one scale regardless of their units.
 
@@ -1266,7 +1266,7 @@ p_rq3d_roc
 ggsave("figures/RQ3D_roc_comparison.png", p_rq3d_roc, width = 5, height = 5, dpi = 300)
 ```
 
-### Are these three independent biomarkers?
+### Independence of the three biomarkers
 
 If two of them measure the same biology, ranking them is beside the point.
 
@@ -1278,7 +1278,7 @@ round(cor(cmp[, c("PDCD1", "GEP", "TMB")], method = "spearman"), 3)
 
 *PDCD1 and the GEP measure nearly the same thing (ρ = 0.90); TMB is independent of both.*
 
-### Do they combine?
+### Combining the biomarkers
 
 TMB is log-transformed as in RQ1, and all predictors are in SD units so the coefficients are comparable.
 
