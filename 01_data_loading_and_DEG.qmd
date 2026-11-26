@@ -1215,7 +1215,7 @@ print(auc_tab, row.names = FALSE)
 
 *All three separate responders from non-responders, with TMB ranking highest.*
 
-A ranking means nothing unless the gaps exceed sampling noise, so the differences are bootstrapped directly.
+A ranking is less useful if the gaps fall within sampling noise, so the differences are bootstrapped directly.
 
 ```{r}
 #| label: rq3d-auc-differences
