@@ -4,6 +4,7 @@ author: "Vera Vecherskaia, Dhruva Sakhare, Zoja Palová, Giosuè Palliotto, Thot
 format:
   html:
     embed-resources: true
+    output-file: cpm_project_grp_10
 ---
 
 ```{r}
@@ -819,7 +820,7 @@ pheatmap(
 
 ### Dependence on the weakest genes
 
-Two genes look like dead weight: `HLA-DQA1` is undetected in two thirds of samples, and `CD276` points the opposite way to the rest, which Ayers et al. also report. Our unweighted mean keeps the first and adds the second positively; does either cost anything?
+Two genes look like dead weight: `HLA-DQA1` is undetected in two thirds of samples, and `CD276` points the opposite way to the rest, which Ayers et al. also report. Our unweighted mean keeps the first and adds the second positively; does either weaken the score?
 
 ```{r}
 #| label: rq2-robustness
@@ -1128,7 +1129,7 @@ Overall, the three biomarkers capture complementary aspects of tumor immunology:
 
 The previous section establishes that all three biomarkers are associated with response. This section asks which of them discriminates best, whether they carry independent information, and whether combining them helps.
 
-All three on a consistent basis: `log2(TPM + 1)` and RQ2's gene list. Because `PDCD1` is one of those genes, the score is rebuilt here without it. Each biomarker there is tested on every patient who has it measured; ranking them against each other needs one cohort, so the comparisons below use the 150 patients with all three values. That costs little: the GEP's AUC is 0.731 (0.619–0.833) on all 192 and 0.756 (0.643–0.855) on the matched 150, because precision is set by the 25 responders and only 4 of them lack TMB.
+All three on a consistent basis: `log2(TPM + 1)` and RQ2's gene list. Because `PDCD1` is one of those genes, the score is rebuilt here without it. Each biomarker there is tested on every patient who has it measured; ranking them against each other needs one cohort, so the comparisons below use the 150 patients with all three values. The GEP's AUC is 0.731 (0.619–0.833) on all 192 and 0.756 (0.643–0.855) on the matched 150, because precision is set by the 25 responders and only 4 of them lack TMB.
 
 ```{r}
 #| label: rq3d-setup
@@ -1331,7 +1332,7 @@ cat("LRT adding PDCD1 to GEP+TMB:  p =",
                  test = "Chisq")$`Pr(>Chi)`[2], 3), "\n")
 ```
 
-*GEP + TMB is the best model on both AIC and cross-validation, and PDCD1 adds nothing once the GEP is included. Cross-validation separates what the in-sample AUC hides: all three drops to 0.809, below both pairs, and GEP + PDCD1 falls to 0.723, worse than either gene alone. Pairing two measures of the same axis costs a parameter and buys nothing.*
+*GEP + TMB is the best model on both AIC and cross-validation, and PDCD1 adds nothing once the GEP is included. Cross-validation separates what the in-sample AUC hides: all three drops to 0.809, below both pairs, and GEP + PDCD1 falls to 0.723, worse than either gene alone. Pairing two measures of the same axis adds a parameter without adding information.*
 
 ```{r}
 #| label: rq3d-combination-roc
