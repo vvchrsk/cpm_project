@@ -1371,11 +1371,9 @@ None is demonstrably better than another. Every pairwise difference straddles ze
 
 PDCD1 and the GEP are not independent (ρ = 0.90), and this is not an artefact of `PDCD1` sitting in the gene list, since the score used here excludes it. Both measure the T-cell-inflamed axis, and PDCD1's two ligands (`CD274`, `PDCD1LG2`) remain signature members. TMB is independent of both (ρ = 0.09, 0.14).
 
-So the three biomarkers reduce to two axes: an RNA immune axis and a DNA mutational axis. GEP + TMB is the best model (AIC 93.1, AUC 0.846); adding TMB to GEP is decisive (*p* = 1.4 × 10⁻⁵) while adding PDCD1 on top contributes nothing (*p* = 0.86). This matches Mariathasan et al., who report response associated with a CD8 T-effector phenotype and, more strongly, with mutational burden.
+So the three biomarkers reduce to two axes: an RNA immune axis and a DNA mutational axis. GEP + TMB is the best model (AIC 93.1, cross-validated AUC 0.820); adding TMB to GEP is decisive (*p* = 1.4 × 10⁻⁵) while adding PDCD1 on top contributes nothing (*p* = 0.86). This matches Mariathasan et al., who report response associated with a CD8 T-effector phenotype and, more strongly, with mutational burden.
 
 Each has a different weakness. TMB captures antigenic potential but says nothing about whether the immune system engaged, and it is missing for 22% of patients. PDCD1 is cheap and directly tied to the drug target, but it cannot separate activation from exhaustion, and a single gene is noisier than an average. The GEP is more stable across 18 co-expressed genes, though like any bulk measure it cannot tell where the T cells are.
-
-Missingness is non-informative (response 14.0% with TMB vs 9.5% without, *p* = 0.61; GEP does not differ by availability, *p* = 0.47), but 42 patients are still excluded. AUCs are in-sample, and the endpoint remains complete response against progressive disease.
 
 ## RQ4 —  The influence of tumor purity on immune-related biomarker
 
