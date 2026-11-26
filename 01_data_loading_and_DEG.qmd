@@ -24,9 +24,6 @@ library(ggplot2)
 # library(limma)
 library(broom)
 
-# The server needs cairo for PNG output. On macOS capabilities("cairo") can
-# report TRUE while the library fails to load (it needs XQuartz), which breaks
-# every plot, so only set it when cairo really works.
 local({
   v <- suppressWarnings(tryCatch(grDevices::cairoVersion(),
                                  error = function(e) NA_character_))
