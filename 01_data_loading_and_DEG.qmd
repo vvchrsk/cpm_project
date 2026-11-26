@@ -1290,10 +1290,30 @@ model_set <- list("PDCD1" = BOR ~ PDCD1, "GEP" = BOR ~ GEP, "TMB" = BOR ~ TMB,
                   "GEP + PDCD1" = BOR ~ GEP + PDCD1,
                   "all three" = BOR ~ GEP + PDCD1 + TMB)
 
+# Coefficients are fitted on the same 150 patients the in-sample AUC is read
+# off, which flatters models with more predictors. Repeated stratified 5-fold
+# CV gives each patient a prediction from a model that never saw them.
+cv_pred <- function(fm, R = 40, K = 5) {
+  out <- matrix(NA_real_, nrow(z3), R)
+  for (r in seq_len(R)) {
+    fold <- integer(nrow(z3))
+    fold[y3]  <- sample(rep_len(1:K, sum(y3)))
+    fold[!y3] <- sample(rep_len(1:K, sum(!y3)))
+    for (k in 1:K) {
+      m <- suppressWarnings(glm(fm, data = z3[fold != k, ], family = binomial))
+      out[fold == k, r] <- predict(m, newdata = z3[fold == k, ], type = "link")
+    }
+  }
+  out
+}
+
+set.seed(7)
 do.call(rbind, lapply(names(model_set), function(nm) {
-  m <- glm(model_set[[nm]], data = z3, family = binomial)
-  data.frame(model = nm, AIC = round(AIC(m), 1),
-             AUC = round(auc_mw(predict(m, type = "link"), y3), 3))
+  m  <- glm(model_set[[nm]], data = z3, family = binomial)
+  cv <- cv_pred(model_set[[nm]])
+  data.frame(model  = nm, AIC = round(AIC(m), 1),
+             AUC    = round(auc_mw(predict(m, type = "link"), y3), 3),
+             CV_AUC = round(mean(apply(cv, 2, function(pr) auc_mw(pr, y3))), 3))
 })) |> print(row.names = FALSE)
 
 cat("\nLRT adding TMB to GEP:        p =",
@@ -1306,7 +1326,36 @@ cat("LRT adding PDCD1 to GEP+TMB:  p =",
                  test = "Chisq")$`Pr(>Chi)`[2], 3), "\n")
 ```
 
-*GEP + TMB is the best model, and PDCD1 adds nothing once the GEP is included.*
+*GEP + TMB is the best model on both AIC and cross-validation, and PDCD1 adds nothing once the GEP is included. Cross-validation separates what the in-sample AUC hides: all three drops to 0.809, below both pairs, and GEP + PDCD1 falls to 0.723, worse than either gene alone. Pairing two measures of the same axis costs a parameter and buys nothing.*
+
+```{r}
+#| label: rq3d-combination-roc
+#| fig-width: 5
+#| fig-height: 5
+
+# Out-of-fold predictions averaged over the repeats, so these curves are
+# directly comparable to the single-biomarker curves above.
+set.seed(7)
+cv_roc <- do.call(rbind, lapply(c("GEP", "TMB", "GEP + TMB"),
+                                function(nm) roc_pts(rowMeans(cv_pred(model_set[[nm]])), nm)))
+cv_roc$biomarker <- factor(cv_roc$biomarker, levels = c("GEP + TMB", "TMB", "GEP"))
+
+p_rq3d_cv_roc <- ggplot(cv_roc, aes(fpr, tpr, colour = biomarker)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey65") +
+  geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = c("GEP + TMB" = starfish[2], TMB = starfish[1],
+                                 GEP = starfish[6])) +
+  coord_equal() +
+  labs(title = "Cross-validated discrimination",
+       subtitle = "Out-of-fold predictions, 5-fold CV over 40 repeats",
+       x = "False positive rate", y = "True positive rate", colour = NULL) +
+  theme_minimal(base_size = 12) + theme(panel.grid.minor = element_blank())
+
+p_rq3d_cv_roc
+ggsave("figures/RQ3D_cv_roc.png", p_rq3d_cv_roc, width = 5, height = 5, dpi = 300)
+```
+
+*The two independent axes together clear either one alone; the gain comes from adding TMB, not from adding a second immune marker.*
 
 ### Interpretation
 
