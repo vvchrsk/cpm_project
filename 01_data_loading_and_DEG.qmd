@@ -968,8 +968,6 @@ AUC 0.73 means roughly one pair in four is ranked wrongly, and three quarters of
 
 How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses? Suggested tasks:
 
-
-
 ```{r}
 all(clinical$pat_id %in% colnames(tpm))
 
@@ -1046,8 +1044,6 @@ df <- data.frame(
   Response = factor(clinical$BOR))
 
 stopifnot(identical(df$sample, colnames(tpm_counts)))
-
-df <- df[complete.cases(df), ] # keep only complete records
 ```
 
 • Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
@@ -1058,8 +1054,8 @@ PD1_Response_test <- wilcox.test(PD1 ~ Response, data = df)
 GEP_Response_test <- wilcox.test(GEP_scores ~ Response, data = df)
 
 TMB_Response_test # W = 564.5, p-value = 1.73e-05
-PD1_Response_test # W = 1211, p-value = 0.000721
-GEP_Response_test # W = 1199, p-value = 0.0006106
+PD1_Response_test # W = 1169, p-value = 0.0003961
+GEP_Response_test # W = 1122, p-value = 0.0001961
 
 aggregate(
   cbind(TMB, PD1, GEP_scores) ~ Response,
@@ -1103,11 +1099,11 @@ grid.arrange(TMB_plot, PD1_plot, GEP_plot, ncol = 3)
 
 Wilcoxon rank-sum tests were used to compare biomarker distributions between responders (R) and non-responders (NR). This non-parametric test is appropriate because the two response groups are independent, their sizes are unequal (25 responders and 167 non-responders), and it does not require the biomarker values to follow a normal distribution.
 
-All three biomarkers showed statistically significant differences between response groups (p \< 0.001), with higher median values in responders. TMB increased from 7 in non-responders to 14 in responders, PDCD1 expression from 18 to 42, and the GEP score from -0.26 to 0.31.
+All three biomarkers showed statistically significant differences between response groups (p \< 0.001), with higher median values in responders. TMB increased from 7 in non-responders to 14 in responders, PDCD1 expression from 0.55 to 1.2, and the GEP score from -0.15 to 0.55.
 
 Kendall's rank correlation was used to assess the direction and strength of the association between each biomarker and treatment response. This method is suitable because response is a binary variable (NR or R), and it does not assume a linear relationship or normally distributed biomarker values.
 
-All three biomarkers showed statistically significant positive associations with treatment response. TMB had the highest correlation (τ = 0.30), while PDCD1 and GEP showed weaker associations (τ = 0.20 for both).
+All three biomarkers showed statistically significant positive associations with treatment response. TMB had the highest correlation (τ = 0.30), while PDCD1 and GEP showed weaker associations (τ = 0.21, τ = 0.22).
 
 Despite statistical significance, the correlation coefficients indicate that all three associations are relatively weak, with TMB showing a modestly stronger association. Therefore, none of the biomarkers individually demonstrates a strong association with treatment response.
 
